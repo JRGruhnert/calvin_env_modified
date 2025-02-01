@@ -12,3 +12,4 @@ opencv-python
 pandas
 pybullet
 scipy
+pybullet_planning
