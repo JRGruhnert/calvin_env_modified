@@ -12,17 +12,6 @@ from termcolor import cprint
 from pybullet_planning import BASE_LINK, RED, BLUE, GREEN
 import pybullet_planning as planner
 
-from pybullet_planning import Pose, Point, Euler
-from pybullet_planning import multiply, invert, get_distance
-from pybullet_planning import create_obj, create_attachment, Attachment
-from pybullet_planning import link_from_name, get_link_pose, get_moving_links, get_link_name, get_disabled_collisions, \
-    get_body_body_disabled_collisions, has_link, are_links_adjacent
-from pybullet_planning import get_num_joints, get_joint_names, get_movable_joints, set_joint_positions, joint_from_name, \
-    joints_from_names, get_sample_fn, plan_joint_motion
-from pybullet_planning import dump_world, set_pose
-from pybullet_planning import get_collision_fn, get_floating_body_collision_fn, expand_links, create_box
-from pybullet_planning import pairwise_collision, pairwise_collision_info, draw_collision_diagnosis, body_collision_info
-
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -32,7 +21,7 @@ class PandaArmMotionPlanningSolver:
     pyBullet MotionPlanner for the Panda Arm
     """
 
-    def __init__(self, vr_controller, limit_angle, visualize_vr_pos, reset_button_queue_len):
+    def __init__(self, env, limit_angle, visualize_vr_pos, reset_button_queue_len):
         planner.connect(use_gui=True)
 
         # * zoom in so we can see it, this is optional
@@ -40,9 +29,6 @@ class PandaArmMotionPlanningSolver:
         camera_pt = np.array(camera_base_pt) + np.array([0.1, -0.1, 0.1])
         planner.set_camera_pose(tuple(camera_pt), camera_base_pt)
         
-        
-        self.vr_controller_id = vr_controller.vr_controller_id
-        self.vr_controller = vr_controller
         self.visualize_vr_pos = visualize_vr_pos
         self.vr_pos_uid = None
         if visualize_vr_pos:
@@ -61,6 +47,8 @@ class PandaArmMotionPlanningSolver:
         """
         Create a route from start to goal
         """
+
+        route  = planner.lazy_prm(start, goal, **kwargs)
         return planner.plan_joint_motion(start, goal, **kwargs)
     
     def step(self, state_obs):
