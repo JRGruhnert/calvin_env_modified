@@ -1,5 +1,6 @@
 import collections
 import logging
+import time
 
 import numpy as np
 import pybullet as p
@@ -20,10 +21,10 @@ class PandaArmMotionPlanningSolver:
     """
     pyBullet MotionPlanner for the Panda Arm
     """
-
     def __init__(self, env, limit_angle, visualize_vr_pos, reset_button_queue_len):
-        planner.connect(use_gui=True)
-
+        self.env = env  # Speichern der Umgebung
+        self.robot = env.robot  # Zugriff auf den Roboter
+        self.p = env.p  # Zugriff auf PyBullet
         # * zoom in so we can see it, this is optional
         camera_base_pt = (0,0,0)
         camera_pt = np.array(camera_base_pt) + np.array([0.1, -0.1, 0.1])
@@ -45,11 +46,20 @@ class PandaArmMotionPlanningSolver:
 
     def create_route(self, start, goal, **kwargs):
         """
-        Create a route from start to goal
+        Plant eine kollisionsfreie Bewegung von start zu goal.
         """
+        # Lade den aktuellen Zustand des Roboters aus der Umgebung
+        joint_positions = self.robot.get_observation()[0]["arm_joint_states"]
 
-        route  = planner.lazy_prm(start, goal, **kwargs)
-        return planner.plan_joint_motion(start, goal, **kwargs)
+        # Berechne eine Bewegungstrajektorie
+        route = planner.plan_joint_motion(self.robot.robot_uid, start, goal, **kwargs)
+
+        if route is None:
+            log.warning("Keine gültige Route gefunden.")
+            return None
+
+        return route
+
     
     def step(self, state_obs):
         """
@@ -81,4 +91,23 @@ class PandaArmMotionPlanningSolver:
         self.prev_action = desired_ee_pos, desired_ee_orn, gripper_action
         return desired_ee_pos, desired_ee_orn, gripper_action
 
+
+    def step(self, action):
+        if isinstance(action, dict) and "motion_plan" in action:
+            # Falls die Aktion eine geplante Trajektorie enthält, iteriere darüber
+            for joint_target in action["motion_plan"]:
+                self.robot.apply_action(joint_target)  
+                self.p.stepSimulation(physicsClientId=self.cid)
+                time.sleep(0.01)  # Zeitverzögerung für Stabilität
+
+        else:
+            # Standardmäßige Aktion, falls keine geplante Trajektorie vorhanden ist
+            self.robot.apply_action(action)
+            for _ in range(self.action_repeat):
+                self.p.stepSimulation(physicsClientId=self.cid)
+
+        self.scene.step()
+        obs = self.get_obs()
+        info = self.get_info()
+        return obs, 0, False, info
 

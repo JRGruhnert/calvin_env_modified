@@ -20,33 +20,28 @@ def main(cfg):
     # Load Scene
     env = hydra.utils.instantiate(cfg.env)
     planner = hydra.utils.instantiate(cfg.motion_planner)
+    route = planner.create_route(start, goal, **kwargs)
 
     data_recorder = None
     if cfg.recorder.record:
         data_recorder = DataRecorder(env, cfg.recorder.record_fps, cfg.recorder.enable_tts)
 
-    log.info("Initialization done!")
-    log.info("Entering Loop")
+    log.info("Level Initiated and Route Calculated!")
 
-    record = False
+    done = False
 
-    n_recorded = 10
-
-    while n_recorded > 0:
+    while not done:
         # get input events
         prev_obs = env.get_state_obs()
-        action = planner.step(prev_obs)
+        action = route.step(prev_obs)
         obs, _, _, info = env.step(action)
-
-
         done = info.get("goal_reached", False)
 
-    if cfg.recorder.record:
-        data_recorder.step(None, obs, done, info)  # 'None' or planner-specific events
+        if cfg.recorder.record:
+            data_recorder.step(None, obs, done, info)  # 'None' or planner-specific events
         
-    if done:
-        n_recorded -= 1
         env.reset()
+
 
 
 
