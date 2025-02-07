@@ -306,5 +306,9 @@ def run_env(cfg):
         time.sleep(0.01)
 
 
+@hydra.main(config_path="../../conf", config_name="config_data_collection")
+def get_env_from_cfg(cfg):
+    return hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
+
 if __name__ == "__main__":
     run_env()
