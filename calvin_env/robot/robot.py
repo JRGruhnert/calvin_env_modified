@@ -181,35 +181,54 @@ class Robot:
     def get_observation(self):
         """
         returns:
-        - robot_state: ndarray (16,)
+        - robot_state: ndarray (23,)
             - tcp_pos: robot_state[:3]
             - tcp_orn: robot_state[3:7] (quat) / [3:6] (euler)
-            - gripper_opening_width: robot_state[7:8] (quat) / [6:7] (euler)
-            - arm_joint_states: robot_state[8:15] (quat) / [7:14] (euler)
-            - gripper_action: robot_state[15:] (quat) / [14:] (euler)
+            - gripper_opening_width: robot_state[7:8]
+            - arm_joint_states: robot_state[8:15]  (for a 7-DoF arm)
+            - arm_joint_velocities: robot_state[15:22]
+            - gripper_action: robot_state[22:] 
         - robot_info: Dict
         """
+        # Get tcp position and orientation
         tcp_pos, tcp_orn = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
         if self.euler_obs:
             tcp_orn = p.getEulerFromQuaternion(tcp_orn)
+
+        # Compute gripper opening width from two finger joints
         gripper_opening_width = (
             p.getJointState(self.robot_uid, self.gripper_joint_ids[0], physicsClientId=self.cid)[0]
             + p.getJointState(self.robot_uid, self.gripper_joint_ids[1], physicsClientId=self.cid)[0]
         )
-        arm_joint_states = []
+
+        gripper_opening_state = 1 if gripper_opening_width > 0.009 else -1
+
+        gripper_ee_pose = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
+
+        # Get arm joint positions
+        arm_joint_positions = []
+        arm_joint_velocities = []
         for i in self.arm_joint_ids:
-            arm_joint_states.append(p.getJointState(self.robot_uid, i, physicsClientId=self.cid)[0])
-        robot_state = np.array([*tcp_pos, *tcp_orn, gripper_opening_width, *arm_joint_states, self.gripper_action])
+            joint_state = p.getJointState(self.robot_uid, i, physicsClientId=self.cid)
+            arm_joint_positions.append(joint_state[0])
+            arm_joint_velocities.append(joint_state[1])
+
+        # Combine into a single state vector; adjust sizes if using Euler (3 angles) instead of quaternions (4 angles)
+        robot_state = np.array([*tcp_pos, *tcp_orn, gripper_opening_width, *arm_joint_positions, *arm_joint_velocities, self.gripper_action])
+
         robot_info = {
             "tcp_pos": tcp_pos,
             "tcp_orn": tcp_orn,
             "gripper_opening_width": gripper_opening_width,
-            "arm_joint_states": arm_joint_states,
+            "arm_joint_positions": arm_joint_positions,
+            "arm_joint_velocities": arm_joint_velocities,  # new field
             "gripper_action": self.gripper_action,
+            "ee_pose": gripper_ee_pose,
             "uid": self.robot_uid,
             "contacts": p.getContactPoints(bodyA=self.robot_uid, physicsClientId=self.cid),
         }
         return robot_state, robot_info
+
 
     def get_observation_labels(self):
         tcp_pos_labels = [f"tcp_pos_{ax}" for ax in ("x", "y", "z")]
