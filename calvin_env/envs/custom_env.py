@@ -24,7 +24,7 @@ from calvin_env.utils.utils import FpsController, get_git_commit_hash
 log = logging.getLogger(__name__)
 
 
-class PlayTableSimEnv(gym.Env):
+class CustomCalvinEnv(gym.Env):
     def __init__(
         self,
         robot_cfg,
@@ -295,7 +295,7 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
     return env
 
 
-@hydra.main(config_path="../../conf", config_name="config_data_collection")
+@hydra.main(config_path="../../conf", config_name="config_motion_data_collection")
 def run_env(cfg):
     env = hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
 
@@ -315,7 +315,7 @@ def run_env(cfg):
         time.sleep(0.01)
 
 
-@hydra.main(config_path="../../conf", config_name="config_data_collection")
+@hydra.main(config_path="../../conf", config_name="config_motion_data_collection")
 def get_env_from_cfg(cfg):
     return hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
 
