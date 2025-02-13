@@ -298,16 +298,20 @@ class Robot:
                     target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
                 jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
         else:
-            if len(action) == 7:
-                action = self.relative_to_absolute(action)
-            target_ee_pos, target_ee_orn, self.gripper_action = action
+            if len(action) == 8: # joint action
+                jnt_ps = action[:7]
+                self.gripper_action = int(action[-1])
+            else:
+                if len(action) == 7: # ee action
+                    action = self.relative_to_absolute(action)
+                target_ee_pos, target_ee_orn, self.gripper_action = action
 
-            assert len(target_ee_pos) == 3
-            assert len(target_ee_orn) in (3, 4)
-            # automatically transform euler actions to quaternion
-            if len(target_ee_orn) == 3:
-                target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
-            jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
+                assert len(target_ee_pos) == 3
+                assert len(target_ee_orn) in (3, 4)
+                # automatically transform euler actions to quaternion
+                if len(target_ee_orn) == 3:
+                    target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
+                jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
 
         if not isinstance(self.gripper_action, int) and len(self.gripper_action) == 1:
             self.gripper_action = self.gripper_action[0]
@@ -315,6 +319,7 @@ class Robot:
 
         self.control_motors(jnt_ps)
 
+    
     def control_motors(self, joint_positions):
         for i in range(self.end_effector_link_id):
             # p.resetJointState(self.robot_uid, i, jnt_ps[i])
