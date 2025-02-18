@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import pybullet as p
+import torch
 
 from calvin_env.robot.mixed_ik import MixedIK
 
@@ -203,12 +204,17 @@ class Robot:
 
         gripper_opening_state = 1 if gripper_opening_width > 0.009 else -1
 
-        gripper_ee_pose = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
+        gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
+        #gripper_ee_pose = (gripper_ee_state[0], p.getEulerFromQuaternion(gripper_ee_state[1]))
+        #gripper_ee_pose = [gripper_ee_state[0], gripper_ee_state[1]]
+        gripper_ee_pose = torch.tensor(list(gripper_ee_state[0]) + list(gripper_ee_state[1]))
 
+        
+        
         # Get arm joint positions
         arm_joint_positions = []
         arm_joint_velocities = []
-        for i in self.arm_joint_ids:
+        for i in self.arm_joint_ids + [7,8]: #TODO: remove hardcoded values
             joint_state = p.getJointState(self.robot_uid, i, physicsClientId=self.cid)
             arm_joint_positions.append(joint_state[0])
             arm_joint_velocities.append(joint_state[1])
@@ -223,12 +229,12 @@ class Robot:
             "arm_joint_positions": arm_joint_positions,
             "arm_joint_velocities": arm_joint_velocities,  # new field
             "gripper_action": self.gripper_action,
+            "gripper_opening_state": gripper_opening_state,
             "ee_pose": gripper_ee_pose,
             "uid": self.robot_uid,
             "contacts": p.getContactPoints(bodyA=self.robot_uid, physicsClientId=self.cid),
         }
         return robot_state, robot_info
-
 
     def get_observation_labels(self):
         tcp_pos_labels = [f"tcp_pos_{ax}" for ax in ("x", "y", "z")]
@@ -248,6 +254,7 @@ class Robot:
         assert len(action) == 7
         action = np.copy(action)
         rel_pos, rel_orn, gripper = np.split(action, [3, 6])
+
         rel_pos *= self.max_rel_pos * self.magic_scaling_factor_pos
         rel_orn *= self.max_rel_orn * self.magic_scaling_factor_orn
         if self.use_target_pose:
@@ -261,6 +268,11 @@ class Robot:
             abs_orn = np.array(tcp_orn) + rel_orn
             return abs_pos, abs_orn, gripper
 
+    def apply_joint_action(self, action):
+        assert len(action) == 10
+        jnt_ps = np.array(action[:9])
+        self.control_motors(jnt_ps)
+        
     def apply_action(self, action):
         jnt_ps = None
         if isinstance(action, dict):
@@ -298,8 +310,9 @@ class Robot:
                     target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
                 jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
         else:
-            if len(action) == 8: # joint action
-                jnt_ps = action[:7]
+            if len(action) == 10: # joint action
+                # Get arm joint positions
+                jnt_ps = action[:9]
                 self.gripper_action = int(action[-1])
             else:
                 if len(action) == 7: # ee action
@@ -315,6 +328,11 @@ class Robot:
 
         if not isinstance(self.gripper_action, int) and len(self.gripper_action) == 1:
             self.gripper_action = self.gripper_action[0]
+
+        if self.gripper_action < 0:
+            self.gripper_action = -1
+        elif self.gripper_action >= 0:
+            self.gripper_action = 1
         assert self.gripper_action in (-1, 1)
 
         self.control_motors(jnt_ps)

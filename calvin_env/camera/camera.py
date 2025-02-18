@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import pybullet as p
 
 
 class Camera:
@@ -89,3 +90,42 @@ class Camera:
         if not homogeneous:
             world_pos = world_pos[:3]
         return world_pos
+    
+
+    def get_intr(self):
+        # Convert FOV from degrees to radians
+        fov_rad = np.radians(self.fov)
+        # Compute focal lengths
+        fx = self.width / (2 * np.tan(fov_rad / 2))
+        fy = self.height / (2 * np.tan(fov_rad / 2))
+        # Assume the principal point is at the center of the image
+        cx = self.width / 2
+        cy = self.height / 2
+        # Construct the intrinsic matrix
+        intrinsic_matrix = np.array([
+            [fx,  0, cx],
+            [ 0, fy, cy],
+            [ 0,  0,  1]
+        ])
+        return intrinsic_matrix
+    
+        camera_ls = p.getLinkState(
+            bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
+        )
+        camera_pos, camera_orn = camera_ls[:2]
+        cam_rot = p.getMatrixFromQuaternion(camera_orn)
+        cam_rot = np.array(cam_rot).reshape(3, 3)
+        cam_rot_y, cam_rot_z = cam_rot[:, 1], cam_rot[:, 2]
+        # camera: eye position, target position, up vector
+        self.view_matrix = p.computeViewMatrix(camera_pos, camera_pos + cam_rot_y, -cam_rot_z)
+        self.projection_matrix = p.computeProjectionMatrixFOV(
+            fov=self.fov, aspect=self.aspect, nearVal=self.nearval, farVal=self.farval
+        )
+        image = p.getCameraImage(
+            width=self.width,
+            height=self.height,
+            viewMatrix=self.view_matrix,
+            projectionMatrix=self.projection_matrix,
+            physicsClientId=self.cid,
+        )
+        rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)

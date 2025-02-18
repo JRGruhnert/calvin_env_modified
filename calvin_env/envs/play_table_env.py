@@ -17,8 +17,9 @@ import numpy as np
 import pybullet as p
 import pybullet_utils.bullet_client as bc
 
-import calvin_env
-from calvin_env.utils.utils import FpsController, get_git_commit_hash
+from calvin_env_motionplanner import calvin_env
+from calvin_env_motionplanner.calvin_env.utils.utils import FpsController, get_git_commit_hash
+#from utils.utils import FpsController, get_git_commit_hash
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -69,7 +70,6 @@ class PlayTableSimEnv(gym.Env):
             )
             for name in cameras
         ]
-        log.info(f"Using calvin_env with commit {get_git_commit_hash(Path(calvin_env.__file__))}.")
 
     def __del__(self):
         self.close()
@@ -306,9 +306,14 @@ def run_env(cfg):
         time.sleep(0.01)
 
 
-@hydra.main(config_path="../../conf", config_name="config_data_collection")
-def get_env_from_cfg(cfg):
-    return hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
+def get_env_from_cfg():
+    """Bypass Hydra's execution context and create the environment manually."""
+    with hydra.initialize(config_path="../../conf"):
+        cfg = hydra.compose(config_name="config_data_collection")
+        env = hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
+        assert env is not None, "Failed to create PlayTableSimEnv"
+        return env
+    
 
 if __name__ == "__main__":
     run_env()

@@ -44,3 +44,19 @@ class GripperCamera(Camera):
         )
         rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)
         return rgb_img, depth_img
+
+
+    def get_extr(self):  
+        camera_ls = p.getLinkState(
+            bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
+        )
+        camera_pos, camera_orn = camera_ls[:2]
+        cam_rot = p.getMatrixFromQuaternion(camera_orn)
+        cam_rot = np.array(cam_rot).reshape(3, 3)
+        # Create a 4x4 identity matrix
+        extrinsic_matrix = np.eye(4)
+        # Assign the rotation matrix
+        extrinsic_matrix[:3, :3] = cam_rot
+        # Assign the translation vector
+        extrinsic_matrix[:3, 3] = camera_pos
+        return extrinsic_matrix

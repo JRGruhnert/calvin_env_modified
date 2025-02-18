@@ -7,7 +7,7 @@ import pkgutil
 import re
 import sys
 import time
-
+from loguru import logger
 import cv2
 import gym
 import gym.utils
@@ -18,13 +18,14 @@ import pybullet as p
 import pybullet_utils.bullet_client as bc
 
 import calvin_env
+from calvin_env.camera.camera import Camera
 from calvin_env.utils.utils import FpsController, get_git_commit_hash
 
 # A logger for this file
 log = logging.getLogger(__name__)
 
 
-class CustomCalvinEnv(gym.Env):
+class CalvinSimEnv(gym.Env):
     def __init__(
         self,
         robot_cfg,
@@ -63,7 +64,7 @@ class CustomCalvinEnv(gym.Env):
         self.load()
 
         # init cameras after scene is loaded to have robot id available
-        self.cameras = [
+        self.cameras: list[Camera] = [
             hydra.utils.instantiate(
                 cameras[name], cid=self.cid, robot_id=self.robot.robot_uid, objects=self.scene.get_objects()
             )
@@ -73,6 +74,12 @@ class CustomCalvinEnv(gym.Env):
 
     def __del__(self):
         self.close()
+
+    def reset(self, robot_obs=None, scene_obs=None):
+        self.scene.reset(scene_obs)
+        self.robot.reset(robot_obs)
+        self.p.stepSimulation(physicsClientId=self.cid)
+        return self.get_obs()
 
     # From pybullet gym_manipulator_envs code
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/gym/pybullet_envs/gym_manipulator_envs.py
@@ -91,6 +98,12 @@ class CustomCalvinEnv(gym.Env):
                 cid = self.p._client
                 if cid < 0:
                     log.error("Failed to connect to GUI.")
+                self.p.resetDebugVisualizerCamera(
+                    cameraDistance=1.5,  
+                    cameraYaw=50,        
+                    cameraPitch=-35,     
+                    cameraTargetPosition=[0, 0, 0]
+                )
             elif self.use_egl:
                 options = f"--width={render_width} --height={render_height}"
                 self.p = p
@@ -149,7 +162,7 @@ class CustomCalvinEnv(gym.Env):
 
     def render(self, mode="human"):
         """render is gym compatibility function"""
-        rgb_obs, depth_obs = self.get_camera_obs()
+        rgb_obs, depth_obs, extr_obs, intr_obs, mask_obs = self.get_camera_obs()
         if mode == "human":
             if "rgb_static" in rgb_obs:
                 img = rgb_obs["rgb_static"][:, :, ::-1]
@@ -171,7 +184,7 @@ class CustomCalvinEnv(gym.Env):
         self.scene.reset(scene_obs)
         self.robot.reset(robot_obs)
         self.p.stepSimulation(physicsClientId=self.cid)
-        return self.get_obs()
+        return self.get_obs() , self.get_info()
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
@@ -191,7 +204,7 @@ class CustomCalvinEnv(gym.Env):
             depth_obs[f"depth_{cam.name}"] = depth
             extr_obs[f"extr_{cam.name}"] = cam.get_extr()  # or cam.extr
             intr_obs[f"intr_{cam.name}"] = cam.get_intr()  # or cam.intr
-            mask_obs[f"mask_{cam.name}"] = cam.get_mask()  # if available
+            mask_obs[f"mask_{cam.name}"] = None#cam.get_mask()  # if available
         return rgb_obs, depth_obs, extr_obs, intr_obs, mask_obs
 
     def get_obs(self):
@@ -229,22 +242,9 @@ class CustomCalvinEnv(gym.Env):
         return info
 
     def step(self, action):
-        # in vr mode real time simulation is enabled, thus p.stepSimulation() does not have to be called manually
-        if self.use_vr:
-            log.debug(f"SIM FPS: {(1 / (time.time() - self.t)):.0f}")
-            self.t = time.time()
-            current_time = time.time()
-            delta_t = current_time - self.prev_time
-            if delta_t >= (1.0 / self.control_freq):
-                log.debug(f"Act FPS: {1 / delta_t:.0f}")
-                self.prev_time = time.time()
-                self.robot.apply_action(action)
-            self.fps_controller.step()
-        # for RL call step simulation repeat
-        else:
-            self.robot.apply_action(action)
-            for i in range(self.action_repeat):
-                self.p.stepSimulation(physicsClientId=self.cid)
+        self.robot.apply_action(action)
+        for i in range(self.action_repeat):
+            self.p.stepSimulation(physicsClientId=self.cid)
         self.scene.step()
         obs = self.get_obs()
         info = self.get_info()
@@ -315,9 +315,13 @@ def run_env(cfg):
         time.sleep(0.01)
 
 
-@hydra.main(config_path="../../conf", config_name="config_motion_data_collection")
-def get_env_from_cfg(cfg):
-    return hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
-
+def get_env_from_cfg():
+    """Bypass Hydra's execution context and create the environment manually."""
+    with hydra.initialize(config_path="../../conf"):
+        cfg = hydra.compose(config_name="config_motion_data_collection")
+        env = hydra.utils.instantiate(cfg.env, show_gui=False, use_vr=False, use_scene_info=True)
+        assert env is not None, "Failed to create CustomSimEnv"
+        return env
+    
 if __name__ == "__main__":
     run_env()

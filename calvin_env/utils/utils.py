@@ -10,7 +10,9 @@ from typing import Union
 
 import git
 import numpy as np
-import quaternion
+
+from tapas_gmm.viz import quaternion
+
 
 # A logger for this file
 logger = logging.getLogger(__name__)

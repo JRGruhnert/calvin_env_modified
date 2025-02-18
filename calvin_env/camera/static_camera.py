@@ -70,3 +70,8 @@ class StaticCamera(Camera):
         )
         rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)
         return rgb_img, depth_img
+
+    def get_extr(self):
+        view_matrix = np.array(self.viewMatrix).reshape(4, 4, order='F')
+        extrinsic_matrix = np.linalg.inv(view_matrix)
+        return extrinsic_matrix
