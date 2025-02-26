@@ -15,14 +15,14 @@ class GripperCamera(Camera):
         self.gripper_cam_link = links["gripper_cam"]
         self.fov = fov
         self.aspect = aspect
-        self.nearval = nearval
-        self.farval = farval
+        self._nearval = nearval
+        self._farval = farval
         self.width = width
         self.height = height
 
-        self.name = name
+        self._name = name
 
-    def render(self):
+    def _render(self):
         camera_ls = p.getLinkState(
             bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
         )
@@ -31,32 +31,14 @@ class GripperCamera(Camera):
         cam_rot = np.array(cam_rot).reshape(3, 3)
         cam_rot_y, cam_rot_z = cam_rot[:, 1], cam_rot[:, 2]
         # camera: eye position, target position, up vector
-        self.view_matrix = p.computeViewMatrix(camera_pos, camera_pos + cam_rot_y, -cam_rot_z)
-        self.projection_matrix = p.computeProjectionMatrixFOV(
-            fov=self.fov, aspect=self.aspect, nearVal=self.nearval, farVal=self.farval
+        self._viewMatrix = p.computeViewMatrix(camera_pos, camera_pos + cam_rot_y, -cam_rot_z)
+        self._projectionMatrix = p.computeProjectionMatrixFOV(
+            fov=self.fov, aspect=self.aspect, nearVal=self._nearval, farVal=self._farval
         )
-        image = p.getCameraImage(
+        return p.getCameraImage(
             width=self.width,
             height=self.height,
-            viewMatrix=self.view_matrix,
-            projectionMatrix=self.projection_matrix,
+            viewMatrix=self._viewMatrix,
+            projectionMatrix=self._projectionMatrix,
             physicsClientId=self.cid,
         )
-        rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)
-        return rgb_img, depth_img
-
-
-    def get_extr(self):  
-        camera_ls = p.getLinkState(
-            bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
-        )
-        camera_pos, camera_orn = camera_ls[:2]
-        cam_rot = p.getMatrixFromQuaternion(camera_orn)
-        cam_rot = np.array(cam_rot).reshape(3, 3)
-        # Create a 4x4 identity matrix
-        extrinsic_matrix = np.eye(4)
-        # Assign the rotation matrix
-        extrinsic_matrix[:3, :3] = cam_rot
-        # Assign the translation vector
-        extrinsic_matrix[:3, 3] = camera_pos
-        return extrinsic_matrix

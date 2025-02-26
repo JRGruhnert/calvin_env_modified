@@ -3,6 +3,7 @@ use_vr: false
 data_path: data
 save_dir: /tmp
 record: true
+bullet_time_step: 80.0
 
 hydra:
   run:
@@ -11,8 +12,8 @@ hydra:
 defaults:
   - cameras: static_and_gripper
   - vr_input: vr_input
-  - env: custom_env
-  - scene: calvin_scene_D
+  - env: play_table_env_tapas
+  - scene: basic_tapas_playtable
   - robot: panda_longer_finger
   - tasks: new_playtable_tasks
   - recorder: recorder

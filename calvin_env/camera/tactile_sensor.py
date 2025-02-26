@@ -21,7 +21,7 @@ class TactileSensor(Camera):
             None
         """
         self.cid = cid
-        self.name = name
+        self._name = name
         self.robot_uid = robot_id
         self.digits = tacto.Sensor(
             width=width, height=height, visualize_gui=visualize_gui, config_path=os.path.join(REPO_BASE, config_path)

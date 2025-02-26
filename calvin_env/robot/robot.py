@@ -1,10 +1,12 @@
 import logging
 
+from loguru import logger
 import numpy as np
 import pybullet as p
 import torch
 
 from calvin_env.robot.mixed_ik import MixedIK
+from calvin_env.utils.noise import Identity, NoiseModel
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -50,11 +52,15 @@ class Robot:
         self.initial_joint_positions = np.array(initial_joint_positions)
         self.gripper_joint_ids = gripper_joint_ids
         self.max_joint_force = max_joint_force
-        self.gripper_force = gripper_force
+        self.max_gripper_force = gripper_force
         self.gripper_joint_limits = gripper_joint_limits
         self.tcp_link_id = tcp_link_id
-        # Setup constraint
-        self.prev_ee_orn = p.getQuaternionFromEuler([0, 0, 0])
+
+        self.joint_velocities_noise: NoiseModel = Identity()
+        self.joint_positions_noise: NoiseModel = Identity()
+        self.joint_forces_noise: NoiseModel = Identity()
+
+        # Setup constraints
         self.robot_uid = None
         self.end_effector_link_id = end_effector_link_id
         self.gripper_action = 1
@@ -168,7 +174,7 @@ class Robot:
                 bodyIndex=self.robot_uid,
                 jointIndex=i,
                 controlMode=p.POSITION_CONTROL,
-                force=self.gripper_force,
+                force=self.max_gripper_force,
                 targetPosition=gripper_state,
                 maxVelocity=1,
                 physicsClientId=self.cid,
@@ -188,7 +194,7 @@ class Robot:
             - gripper_opening_width: robot_state[7:8]
             - arm_joint_states: robot_state[8:15]  (for a 7-DoF arm)
             - arm_joint_velocities: robot_state[15:22]
-            - gripper_action: robot_state[22:] 
+            - gripper_action: robot_state[22:]
         - robot_info: Dict
         """
         # Get tcp position and orientation
@@ -202,35 +208,93 @@ class Robot:
             + p.getJointState(self.robot_uid, self.gripper_joint_ids[1], physicsClientId=self.cid)[0]
         )
 
-        gripper_opening_state = 1 if gripper_opening_width > 0.009 else -1
+        gripper_opening_state = 1 if gripper_opening_width > 0.009 else 0
 
         gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
-        #gripper_ee_pose = (gripper_ee_state[0], p.getEulerFromQuaternion(gripper_ee_state[1]))
-        #gripper_ee_pose = [gripper_ee_state[0], gripper_ee_state[1]]
-        gripper_ee_pose = torch.tensor(list(gripper_ee_state[0]) + list(gripper_ee_state[1]))
+        position = list(gripper_ee_state[0])  # [x, y, z]
+        logger.info(f"Position: {position}")
+        orientation = list(gripper_ee_state[1])  # (x, y, z, w)
+        logger.info(f"Orientation: {orientation}")
+        gripper_pose = np.concatenate([position, orientation])
 
-        
-        
+        # Convert quaternion to rotation matrix (returned as 9 values in row-major order)
+        R = p.getMatrixFromQuaternion(orientation)
+        # The rotation matrix is:
+        # [ R[0] R[1] R[2] ]
+        # [ R[3] R[4] R[5] ]
+        # [ R[6] R[7] R[8] ]
+        #
+        # Here, we define:
+        # - forward vector: along the gripper's local Z axis, using the third column (R[2], R[5], R[8])
+        # - up vector: along the gripper's local Y axis, using the second column (R[1], R[4], R[7])
+        forward = [R[2], R[5], R[8]]
+        up = [R[1], R[4], R[7]]
+
+        # Define the target as a point a small distance ahead along the forward vector.
+        # For instance, target = position + forward (scaled by a desired distance, here using 1.0)
+        target = [position[i] + forward[i] for i in range(3)]
+
+        # Now, compute the view matrix for the gripper camera.
+        gripper_view_matrix = p.computeViewMatrix(
+            cameraEyePosition=position,
+            cameraTargetPosition=target,
+            cameraUpVector=up,
+            physicsClientId=self.cid,
+        )
         # Get arm joint positions
         arm_joint_positions = []
         arm_joint_velocities = []
-        for i in self.arm_joint_ids + [7,8]: #TODO: remove hardcoded values
+        arm_reaction_forces = []
+        arm_applied_torques = []
+        for i in self.arm_joint_ids:  # TODO: remove hardcoded values
             joint_state = p.getJointState(self.robot_uid, i, physicsClientId=self.cid)
             arm_joint_positions.append(joint_state[0])
             arm_joint_velocities.append(joint_state[1])
+            arm_reaction_forces.append(joint_state[2])
+            arm_applied_torques.append(joint_state[3])
+
+        gripper_finger_forces = []
+        gripper_finger_positions = []
+        for i in self.gripper_joint_ids:
+            joint_state = p.getJointState(self.robot_uid, i, physicsClientId=self.cid)
+            gripper_finger_forces.append(joint_state[2])
+            gripper_finger_positions.append(joint_state[0])
 
         # Combine into a single state vector; adjust sizes if using Euler (3 angles) instead of quaternions (4 angles)
-        robot_state = np.array([*tcp_pos, *tcp_orn, gripper_opening_width, *arm_joint_positions, *arm_joint_velocities, self.gripper_action])
+        arm_joint_forces = np.concatenate(np.array(arm_reaction_forces))
+        robot_state = np.array(
+            [
+                *tcp_pos,  # 0
+                *tcp_orn,  # 1
+                *arm_joint_positions,  # 2
+                *arm_joint_velocities,  # 3
+                *arm_joint_forces,  # 4
+                *arm_applied_torques,  # 5
+                self.gripper_action,  # 6
+                gripper_opening_width,  # 7
+                gripper_opening_state,  # 8
+                *gripper_finger_forces[0],  # 9
+                *gripper_finger_forces[1],  # 10
+                *gripper_finger_positions,  # 11
+                *gripper_pose,  # 12
+                # self.robot_uid,  # 11
+            ]
+        )
 
         robot_info = {
             "tcp_pos": tcp_pos,
             "tcp_orn": tcp_orn,
-            "gripper_opening_width": gripper_opening_width,
             "arm_joint_positions": arm_joint_positions,
             "arm_joint_velocities": arm_joint_velocities,  # new field
+            "arm_joint_forces": arm_joint_forces,
+            "arm_applied_torques": arm_applied_torques,
             "gripper_action": self.gripper_action,
+            "gripper_opening_width": gripper_opening_width,
             "gripper_opening_state": gripper_opening_state,
-            "ee_pose": gripper_ee_pose,
+            "gripper_finger_forces": gripper_finger_forces,
+            "gripper_finger_positions": gripper_finger_positions,
+            "gripper_view_matrix": gripper_view_matrix,
+            "gripper_pose": gripper_pose,
             "uid": self.robot_uid,
             "contacts": p.getContactPoints(bodyA=self.robot_uid, physicsClientId=self.cid),
         }
@@ -271,8 +335,15 @@ class Robot:
     def apply_joint_action(self, action):
         assert len(action) == 10
         jnt_ps = np.array(action[:9])
+
+        if self.gripper_action < 0:
+            self.gripper_action = -1
+        elif self.gripper_action >= 0:
+            self.gripper_action = 1
+        assert self.gripper_action in (-1, 1)
+
         self.control_motors(jnt_ps)
-        
+
     def apply_action(self, action):
         jnt_ps = None
         if isinstance(action, dict):
@@ -310,21 +381,16 @@ class Robot:
                     target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
                 jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
         else:
-            if len(action) == 10: # joint action
-                # Get arm joint positions
-                jnt_ps = action[:9]
-                self.gripper_action = int(action[-1])
-            else:
-                if len(action) == 7: # ee action
-                    action = self.relative_to_absolute(action)
-                target_ee_pos, target_ee_orn, self.gripper_action = action
+            if len(action) == 7:  # ee action
+                action = self.relative_to_absolute(action)
+            target_ee_pos, target_ee_orn, self.gripper_action = action
 
-                assert len(target_ee_pos) == 3
-                assert len(target_ee_orn) in (3, 4)
-                # automatically transform euler actions to quaternion
-                if len(target_ee_orn) == 3:
-                    target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
-                jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
+            assert len(target_ee_pos) == 3
+            assert len(target_ee_orn) in (3, 4)
+            # automatically transform euler actions to quaternion
+            if len(target_ee_orn) == 3:
+                target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
+            jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
 
         if not isinstance(self.gripper_action, int) and len(self.gripper_action) == 1:
             self.gripper_action = self.gripper_action[0]
@@ -337,7 +403,6 @@ class Robot:
 
         self.control_motors(jnt_ps)
 
-    
     def control_motors(self, joint_positions):
         for i in range(self.end_effector_link_id):
             # p.resetJointState(self.robot_uid, i, jnt_ps[i])
@@ -356,17 +421,17 @@ class Robot:
     def control_gripper(self, gripper_action):
         if gripper_action == 1:
             gripper_finger_position = self.gripper_joint_limits[1]
-            gripper_force = self.gripper_force / 100
+            self.gripper_force = self.max_gripper_force / 100
         else:
             gripper_finger_position = self.gripper_joint_limits[0]
-            gripper_force = self.gripper_force
+            self.gripper_force = self.max_gripper_force
         for id in self.gripper_joint_ids:
             p.setJointMotorControl2(
                 bodyIndex=self.robot_uid,
                 jointIndex=id,
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=gripper_finger_position,
-                force=gripper_force,
+                force=self.gripper_force,
                 maxVelocity=1,
                 physicsClientId=self.cid,
             )

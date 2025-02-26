@@ -9,6 +9,17 @@ class Camera:
         raise NotImplementedError
 
     def render(self):
+
+        image = self._render()
+        rgb, depth, mask = self.process_rgbd(image, self._nearval, self._farval)
+
+        # mask = self.rgb_image_to_mask(image)
+
+        ptc = self.distance_map_to_point_cloud(depth, self.fov, self.width, self.height)
+        ptc = None  # TODO Make it parameter. I dont need it
+        return rgb, depth, ptc, mask  # Now also returning the segmentation mask
+
+    def _render(self):
         raise NotImplementedError
 
     def distance_map_to_point_cloud(self, distances, fov, width, height):
@@ -42,7 +53,7 @@ class Camera:
         rgb_img = rgb[:, :, :3]
         depth_buffer = np.reshape(depthPixels, [height, width])
         depth = self.z_buffer_to_real_distance(z_buffer=depth_buffer, far=farval, near=nearval)
-        return rgb_img, depth
+        return rgb_img, depth, segmentationMaskBuffer
 
     # Reference: world2pixel
     # https://github.com/bulletphysics/bullet3/issues/1952
@@ -56,8 +67,8 @@ class Camera:
         """
 
         # reshape to get homogeneus transform
-        persp_m = np.array(self.projectionMatrix).reshape((4, 4)).T
-        view_m = np.array(self.viewMatrix).reshape((4, 4)).T
+        persp_m = np.array(self._projectionMatrix).reshape((4, 4)).T
+        view_m = np.array(self._viewMatrix).reshape((4, 4)).T
 
         # Perspective proj matrix
         world_pix_tran = persp_m @ view_m @ point
@@ -78,7 +89,7 @@ class Camera:
         Output
             (x, y): np.array; world coordinates of the deprojected point
         """
-        T_world_cam = np.linalg.inv(np.array(self.viewMatrix).reshape((4, 4)).T)
+        T_world_cam = np.linalg.inv(np.array(self._viewMatrix).reshape((4, 4)).T)
 
         u, v = point
         z = depth_img[v, u]
@@ -90,42 +101,23 @@ class Camera:
         if not homogeneous:
             world_pos = world_pos[:3]
         return world_pos
-    
 
-    def get_intr(self):
-        # Convert FOV from degrees to radians
-        fov_rad = np.radians(self.fov)
-        # Compute focal lengths
-        fx = self.width / (2 * np.tan(fov_rad / 2))
-        fy = self.height / (2 * np.tan(fov_rad / 2))
-        # Assume the principal point is at the center of the image
-        cx = self.width / 2
-        cy = self.height / 2
-        # Construct the intrinsic matrix
-        intrinsic_matrix = np.array([
-            [fx,  0, cx],
-            [ 0, fy, cy],
-            [ 0,  0,  1]
-        ])
-        return intrinsic_matrix
-    
-        camera_ls = p.getLinkState(
-            bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
-        )
-        camera_pos, camera_orn = camera_ls[:2]
-        cam_rot = p.getMatrixFromQuaternion(camera_orn)
-        cam_rot = np.array(cam_rot).reshape(3, 3)
-        cam_rot_y, cam_rot_z = cam_rot[:, 1], cam_rot[:, 2]
-        # camera: eye position, target position, up vector
-        self.view_matrix = p.computeViewMatrix(camera_pos, camera_pos + cam_rot_y, -cam_rot_z)
-        self.projection_matrix = p.computeProjectionMatrixFOV(
-            fov=self.fov, aspect=self.aspect, nearVal=self.nearval, farVal=self.farval
-        )
-        image = p.getCameraImage(
-            width=self.width,
-            height=self.height,
-            viewMatrix=self.view_matrix,
-            projectionMatrix=self.projection_matrix,
-            physicsClientId=self.cid,
-        )
-        rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)
+    @property
+    def viewMatrix(self):
+        return self._viewMatrix
+
+    @property
+    def projectionMatrix(self):
+        return self._projectionMatrix
+
+    @property
+    def nearval(self):
+        return self._nearval
+
+    @property
+    def farval(self):
+        return self._farval
+
+    @property
+    def name(self):
+        return self._name

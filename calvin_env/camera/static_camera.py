@@ -29,8 +29,8 @@ class StaticCamera(Camera):
         Returns:
             None
         """
-        self.nearval = nearval
-        self.farval = farval
+        self._nearval = nearval
+        self._farval = farval
         self.fov = fov
         self.aspect = aspect
         self.look_from = look_from
@@ -38,14 +38,14 @@ class StaticCamera(Camera):
         self.up_vector = up_vector
         self.width = width
         self.height = height
-        self.viewMatrix = p.computeViewMatrix(
+        self._viewMatrix = p.computeViewMatrix(
             cameraEyePosition=look_from, cameraTargetPosition=look_at, cameraUpVector=self.up_vector
         )
-        self.projectionMatrix = p.computeProjectionMatrixFOV(
-            fov=fov, aspect=aspect, nearVal=self.nearval, farVal=self.farval
+        self._projectionMatrix = p.computeProjectionMatrixFOV(
+            fov=fov, aspect=aspect, nearVal=self._nearval, farVal=self._farval
         )
         self.cid = cid
-        self.name = name
+        self._name = name
 
     def set_position_from_gui(self):
         info = p.getDebugVisualizerCamera(physicsClientId=self.cid)
@@ -53,25 +53,18 @@ class StaticCamera(Camera):
         dist = info[-2]
         forward = np.array(info[5])
         look_from = look_at - dist * forward
-        self.viewMatrix = p.computeViewMatrix(
+        self._viewMatrix = p.computeViewMatrix(
             cameraEyePosition=look_from, cameraTargetPosition=look_at, cameraUpVector=self.up_vector
         )
         look_from = [float(x) for x in look_from]
         look_at = [float(x) for x in look_at]
         return look_from, look_at
 
-    def render(self):
-        image = p.getCameraImage(
+    def _render(self):
+        return p.getCameraImage(
             width=self.width,
             height=self.height,
-            viewMatrix=self.viewMatrix,
-            projectionMatrix=self.projectionMatrix,
+            viewMatrix=self._viewMatrix,
+            projectionMatrix=self._projectionMatrix,
             physicsClientId=self.cid,
         )
-        rgb_img, depth_img = self.process_rgbd(image, self.nearval, self.farval)
-        return rgb_img, depth_img
-
-    def get_extr(self):
-        view_matrix = np.array(self.viewMatrix).reshape(4, 4, order='F')
-        extrinsic_matrix = np.linalg.inv(view_matrix)
-        return extrinsic_matrix
