@@ -1,6 +1,4 @@
 import logging
-
-from loguru import logger
 import numpy as np
 import pybullet as p
 import torch
@@ -77,6 +75,8 @@ class Robot:
         self.target_orn = None
         self.use_target_pose = use_target_pose
         # self.reconfigure = False
+
+        print("filepath", self.filename)
 
     def load(self):
         self.robot_uid = p.loadURDF(
@@ -185,6 +185,10 @@ class Robot:
         self.target_pos = np.array(tcp_pos)
         self.target_orn = np.array(tcp_orn)
 
+        if len(tcp_orn) == 3:
+            tcp_orn = p.getQuaternionFromEuler(tcp_orn)
+        return np.concatenate([tcp_pos, tcp_orn, [gripper_state]])
+
     def get_observation(self):
         """
         returns:
@@ -212,10 +216,11 @@ class Robot:
 
         gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
         position = list(gripper_ee_state[0])  # [x, y, z]
-        logger.info(f"Position: {position}")
-        orientation = list(gripper_ee_state[1])  # (x, y, z, w)
-        logger.info(f"Orientation: {orientation}")
+        orientation = list(gripper_ee_state[1])  # (qx, qy, qz, qw)
         gripper_pose = np.concatenate([position, orientation])
+
+        tcp_pose = np.concatenate((tcp_pos, tcp_orn))
+        tcp_state = np.concatenate([tcp_pos, tcp_orn])
 
         # Convert quaternion to rotation matrix (returned as 9 values in row-major order)
         R = p.getMatrixFromQuaternion(orientation)
@@ -295,6 +300,8 @@ class Robot:
             "gripper_finger_positions": gripper_finger_positions,
             "gripper_view_matrix": gripper_view_matrix,
             "gripper_pose": gripper_pose,
+            "tcp_pose": tcp_pose,
+            "tcp_state": self.gripper_action,
             "uid": self.robot_uid,
             "contacts": p.getContactPoints(bodyA=self.robot_uid, physicsClientId=self.cid),
         }
@@ -315,21 +322,21 @@ class Robot:
         ]
 
     def relative_to_absolute(self, action):
-        assert len(action) == 7
-        action = np.copy(action)
-        rel_pos, rel_orn, gripper = np.split(action, [3, 6])
+        rel_pos, rel_quat, gripper = np.split(action, [3, -1])
+        rel_rot = p.getEulerFromQuaternion(rel_quat)
+        rel_rot = np.array(rel_rot)
 
         rel_pos *= self.max_rel_pos * self.magic_scaling_factor_pos
-        rel_orn *= self.max_rel_orn * self.magic_scaling_factor_orn
+        rel_rot *= self.max_rel_orn * self.magic_scaling_factor_orn
         if self.use_target_pose:
             self.target_pos += rel_pos
-            self.target_orn += rel_orn
+            self.target_orn += rel_rot
             return self.target_pos, self.target_orn, gripper
         else:
             tcp_pos, tcp_orn = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
             tcp_orn = p.getEulerFromQuaternion(tcp_orn)
             abs_pos = np.array(tcp_pos) + rel_pos
-            abs_orn = np.array(tcp_orn) + rel_orn
+            abs_orn = np.array(tcp_orn) + rel_rot
             return abs_pos, abs_orn, gripper
 
     def apply_joint_action(self, action):
@@ -346,51 +353,24 @@ class Robot:
 
     def apply_action(self, action):
         jnt_ps = None
-        if isinstance(action, dict):
-            if action["type"] == "joint_rel":
-                current_joint_states = np.array(list(zip(*p.getJointStates(self.robot_uid, self.arm_joint_ids)))[0])
-                assert len(action["action"]) == 8
-                rel_jnt_ps = action["action"][:7]
-                jnt_ps = current_joint_states + rel_jnt_ps
-                self.gripper_action = int(action["action"][-1])
-            elif action["type"] == "joint_abs":
-                assert len(action["action"]) == 8
-                jnt_ps = action["action"][:7]
-                self.gripper_action = int(action["action"][-1])
-            elif action["type"] == "cartesian_rel":
-                assert len(action["action"]) == 7
-                target_ee_pos, target_ee_orn, self.gripper_action = self.relative_to_absolute(action["action"])
-                if len(target_ee_orn) == 3:
-                    target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
-                jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
-            elif action["type"] == "cartesian_abs":
-                if len(action["action"]) == 3:
-                    # if action is a tuple
-                    target_ee_pos, target_ee_orn, self.gripper_action = action["action"]
-                elif len(action["action"]) == 7:
-                    target_ee_pos = action["action"][:3]
-                    target_ee_orn = action["action"][3:6]
-                    self.gripper_action = int(action["action"][-1])
-                elif len(action["action"]) == 8:
-                    target_ee_pos = action["action"][:3]
-                    target_ee_orn = action["action"][3:7]
-                    self.gripper_action = int(action["action"][-1])
-                else:
-                    raise ValueError
-                if len(target_ee_orn) == 3:
-                    target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
-                jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
-        else:
-            if len(action) == 7:  # ee action
-                action = self.relative_to_absolute(action)
-            target_ee_pos, target_ee_orn, self.gripper_action = action
 
-            assert len(target_ee_pos) == 3
-            assert len(target_ee_orn) in (3, 4)
-            # automatically transform euler actions to quaternion
-            if len(target_ee_orn) == 3:
-                target_ee_orn = p.getQuaternionFromEuler(target_ee_orn)
-            jnt_ps = self.mixed_ik.get_ik(target_ee_pos, target_ee_orn)
+        if action["type"] == "joint_rel":
+            current_joint_states = np.array(list(zip(*p.getJointStates(self.robot_uid, self.arm_joint_ids)))[0])
+            assert len(action["action"]) == 8
+            rel_jnt_ps = action["action"][:7]
+            jnt_ps = current_joint_states + rel_jnt_ps
+            self.gripper_action = int(action["action"][-1])
+        elif action["type"] == "joint_abs":
+            assert len(action["action"]) == 8
+            jnt_ps = action["action"][:7]
+            self.gripper_action = int(action["action"][-1])
+        elif action["type"] == "quat_rel":
+            abs_pos, abs_rot_euler, self.gripper_action = self.relative_to_absolute(action["action"])
+            abs_rot_quat = p.getQuaternionFromEuler(abs_rot_euler)
+            jnt_ps = self.mixed_ik.get_ik(abs_pos, abs_rot_quat)
+        elif action["type"] == "quat_abs":
+            abs_pos, abs_rot_quat, self.gripper_action = np.split(action["action"], [3, 7])
+            jnt_ps = self.mixed_ik.get_ik(abs_pos, abs_rot_quat)
 
         if not isinstance(self.gripper_action, int) and len(self.gripper_action) == 1:
             self.gripper_action = self.gripper_action[0]
@@ -400,7 +380,6 @@ class Robot:
         elif self.gripper_action >= 0:
             self.gripper_action = 1
         assert self.gripper_action in (-1, 1)
-
         self.control_motors(jnt_ps)
 
     def control_motors(self, joint_positions):

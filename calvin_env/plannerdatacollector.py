@@ -39,10 +39,8 @@ def main(cfg):
 
         if cfg.recorder.record:
             data_recorder.step(None, obs, done, info)  # 'None' or planner-specific events
-        
+
         env.reset()
-
-
 
 
 if __name__ == "__main__":

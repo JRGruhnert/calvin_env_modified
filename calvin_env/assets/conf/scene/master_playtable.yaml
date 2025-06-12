@@ -1,4 +1,4 @@
-_target_: calvin_env.scene.play_table_scene_tapas.PlayTableSceneTapas
+_target_: calvin_env.scene.master_scene.Scene
 _recursive_: false
 data_path: ${data_path}
 global_scaling: 0.8
@@ -41,7 +41,7 @@ objects:
       lights:
         lightbulb:
           link: light_link
-          color: [1, 1, 0, 1] # yellow
+          color: [1, 1, 0, 1] # pink
         led:
           link: led_link
           color: [0, 1, 0, 1] # green

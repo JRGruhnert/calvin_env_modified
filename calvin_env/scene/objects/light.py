@@ -1,5 +1,7 @@
 from enum import Enum
 
+import numpy as np
+
 
 class LightState(Enum):
     ON = 1
@@ -35,7 +37,13 @@ class Light:
                 raise ValueError
 
     def get_state(self):
-        return self.state.value
+        return float(self.state.value)
+
+    def get_pose(self, euler_obs=False):
+        pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
+        if euler_obs:
+            orn = self.p.getEulerFromQuaternion(orn)
+        return np.concatenate([pos, orn])
 
     def get_info(self):
         return {"logical_state": self.get_state()}

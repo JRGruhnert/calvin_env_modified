@@ -3,6 +3,7 @@ use_vr: true
 data_path: data
 save_dir: /tmp
 record: true
+bullet_time_step: 240.0
 
 hydra:
   run:

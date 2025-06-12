@@ -17,12 +17,13 @@ class GripperCamera(Camera):
         self.aspect = aspect
         self._nearval = nearval
         self._farval = farval
-        self.width = width
-        self.height = height
+        self._width = width
+        self._height = height
 
         self._name = name
 
     def _render(self):
+        "Render the scene from the tcp's perspective."
         camera_ls = p.getLinkState(
             bodyUniqueId=self.robot_uid, linkIndex=self.gripper_cam_link, physicsClientId=self.cid
         )
@@ -36,8 +37,8 @@ class GripperCamera(Camera):
             fov=self.fov, aspect=self.aspect, nearVal=self._nearval, farVal=self._farval
         )
         return p.getCameraImage(
-            width=self.width,
-            height=self.height,
+            width=self._width,
+            height=self._height,
             viewMatrix=self._viewMatrix,
             projectionMatrix=self._projectionMatrix,
             physicsClientId=self.cid,

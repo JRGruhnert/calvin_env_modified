@@ -1,3 +1,4 @@
+import datetime
 import logging
 from math import pi
 import os
@@ -7,7 +8,6 @@ import pkgutil
 import re
 import sys
 import time
-from loguru import logger
 import cv2
 import gym
 import gym.utils
@@ -20,85 +20,54 @@ import torch
 
 import calvin_env
 from calvin_env.camera.camera import Camera
+from calvin_env.envs.observation import CalvinObservation
+from calvin_env.envs.master_tasks.calvin_task import (
+    CalvinTask,
+    PressButton,
+    OpenGripper,
+    CloseGripper,
+    OpenDrawer,
+    CloseDrawer,
+    MoveToDrawer,
+    OpenCabinet,
+    CloseCabinet,
+    MoveToCabinet,
+    OpenSwitch,
+    CloseSwitch,
+    MoveToLever,
+)
 from calvin_env.robot.robot import Robot
+from calvin_env.scene.master_scene import Scene
 from calvin_env.utils.utils import FpsController, get_git_commit_hash
-from tapas_gmm.utils.observation import dict_to_tensordict
 
 # A logger for this file
 log = logging.getLogger(__name__)
 
 import numpy as np
 
-
 from typing import Tuple
 
 import numpy as np
 
 
-class CalvinObservation(object):
-    """Storage for both visual and low-dimensional observations."""
-
-    def __init__(
-        self,
-        wrist_rgb: np.ndarray,
-        wrist_depth: np.ndarray,
-        wrist_mask: np.ndarray,
-        wrist_point_cloud: np.ndarray,
-        front_rgb: np.ndarray,
-        front_depth: np.ndarray,
-        front_mask: np.ndarray,
-        front_point_cloud: np.ndarray,
-        joint_velocities: np.ndarray,
-        joint_positions: np.ndarray,
-        joint_forces: np.ndarray,
-        gripper_open: float,
-        gripper_pose: np.ndarray,
-        gripper_matrix: np.ndarray,
-        gripper_joint_positions: np.ndarray,
-        gripper_touch_forces: np.ndarray,
-        task_low_dim_state: np.ndarray,
-        misc: dict,
-    ):
-        self.wrist_rgb = wrist_rgb
-        self.wrist_depth = wrist_depth
-        self.wrist_mask = wrist_mask
-        self.wrist_point_cloud = wrist_point_cloud
-        self.front_rgb = front_rgb
-        self.front_depth = front_depth
-        self.front_mask = front_mask
-        self.front_point_cloud = front_point_cloud
-        self.joint_velocities = joint_velocities
-        self.joint_positions = joint_positions
-        self.joint_forces = joint_forces
-        self.gripper_open = gripper_open
-        self.gripper_pose = gripper_pose
-        self.gripper_matrix = gripper_matrix
-        self.gripper_joint_positions = gripper_joint_positions
-        self.gripper_touch_forces = gripper_touch_forces
-        self.task_low_dim_state = task_low_dim_state
-        self.misc = misc
-
-    def get_low_dim_data(self) -> np.ndarray:
-        """Gets a 1D array of all the low-dimensional obseervations.
-
-        :return: 1D array of observations.
-        """
-        low_dim_data = [] if self.gripper_open is None else [[self.gripper_open]]
-        for data in [
-            self.joint_velocities,
-            self.joint_positions,
-            self.joint_forces,
-            self.gripper_pose,
-            self.gripper_joint_positions,
-            self.gripper_touch_forces,
-            self.task_low_dim_state,
-        ]:
-            if data is not None:
-                low_dim_data.append(data)
-        return np.concatenate(low_dim_data) if len(low_dim_data) > 0 else np.array([])
+registered_tasks: dict[str, CalvinTask] = {
+    "PressButton": PressButton,
+    "OpenGripper": OpenGripper,
+    "CloseGripper": CloseGripper,
+    "OpenDrawer": OpenDrawer,
+    "CloseDrawer": CloseDrawer,
+    "MoveToDrawer": MoveToDrawer,
+    "OpenCabinet": OpenCabinet,
+    "CloseCabinet": CloseCabinet,
+    "MoveToCabinet": MoveToCabinet,
+    "OpenSwitchr": OpenSwitch,
+    "CloseSwitch": CloseSwitch,
+    "MoveToLever": MoveToLever,
+}
 
 
-class CalvinEnv(gym.Env):
+class CalvinEnvironment(gym.Env):
+
     def __init__(
         self,
         robot_cfg,
@@ -110,9 +79,11 @@ class CalvinEnv(gym.Env):
         scene_cfg,
         use_scene_info,
         use_egl,
-        control_freq=10,
+        task,
+        control_freq,
+        action_mode,
     ):
-        self.p = p
+        self.physics_client = p
         # for calculation of FPS
         self.t = time.time()
         self.prev_time = time.time()
@@ -130,9 +101,12 @@ class CalvinEnv(gym.Env):
         self.initialize_bullet(bullet_time_step, render_width, render_height)
         self.np_random = None
         self.seed(seed)
-        self.robot = hydra.utils.instantiate(robot_cfg, cid=self.cid)
-        self.scene = hydra.utils.instantiate(scene_cfg, p=self.p, cid=self.cid, np_random=self.np_random)
+        self.robot: Robot = hydra.utils.instantiate(robot_cfg, cid=self.cid)
+        self.scene: Scene = hydra.utils.instantiate(
+            scene_cfg, p=self.physics_client, cid=self.cid, np_random=self.np_random
+        )
 
+        self.task: CalvinTask = registered_tasks.get(task)()
         # Load Env
         self.load()
 
@@ -143,16 +117,14 @@ class CalvinEnv(gym.Env):
             )
             for name in cameras
         ]
-        log.info(f"Using calvin_env with commit {get_git_commit_hash(Path(calvin_env.__file__))}.")
+
+        self.action_mode = action_mode
+        self.camera_map: dict[str, Camera] = {}
+        for cam in self.cameras:
+            self.camera_map[cam.name] = cam
 
     def __del__(self):
         self.close()
-
-    def reset(self, robot_obs=None, scene_obs=None):
-        self.scene.reset(scene_obs)
-        self.robot.reset(robot_obs)
-        self.p.stepSimulation(physicsClientId=self.cid)
-        return self._get_observation()
 
     # From pybullet gym_manipulator_envs code
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/gym/pybullet_envs/gym_manipulator_envs.py
@@ -160,24 +132,24 @@ class CalvinEnv(gym.Env):
         if self.cid < 0:
             self.ownsPhysicsClient = True
             if self.use_vr:
-                self.p = bc.BulletClient(connection_mode=p.SHARED_MEMORY)
-                cid = self.p._client
+                self.physics_client = bc.BulletClient(connection_mode=p.SHARED_MEMORY)
+                cid = self.physics_client._client
                 if cid < 0:
                     log.error("Failed to connect to SHARED_MEMORY bullet server.\n" " Is it running?")
                     sys.exit(1)
-                self.p.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
+                self.physics_client.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
             elif self.show_gui:
-                self.p = bc.BulletClient(connection_mode=p.GUI)
-                cid = self.p._client
+                self.physics_client = bc.BulletClient(connection_mode=p.GUI)
+                cid = self.physics_client._client
                 if cid < 0:
                     log.error("Failed to connect to GUI.")
-                self.p.resetDebugVisualizerCamera(
+                self.physics_client.resetDebugVisualizerCamera(
                     cameraDistance=1.5, cameraYaw=50, cameraPitch=-35, cameraTargetPosition=[0, 0, 0]
                 )
             elif self.use_egl:
                 options = f"--width={render_width} --height={render_height}"
-                self.p = p
-                cid = self.p.connect(p.DIRECT, options=options)
+                self.physics_client = p
+                cid = self.physics_client.connect(p.DIRECT, options=options)
                 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0, physicsClientId=cid)
                 p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0, physicsClientId=cid)
                 p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0, physicsClientId=cid)
@@ -195,60 +167,74 @@ class CalvinEnv(gym.Env):
                 os.environ["PYOPENGL_PLATFORM"] = "egl"
                 log.info("Successfully loaded egl plugin")
             else:
-                self.p = bc.BulletClient(connection_mode=p.DIRECT)
-                cid = self.p._client
+                self.physics_client = bc.BulletClient(connection_mode=p.DIRECT)
+                cid = self.physics_client._client
                 if cid < 0:
                     log.error("Failed to start DIRECT bullet mode.")
             log.info(f"Connected to server with id: {cid}")
 
             self.cid = cid
-            self.p.resetSimulation(physicsClientId=self.cid)
-            self.p.setPhysicsEngineParameter(deterministicOverlappingPairs=1, physicsClientId=self.cid)
-            self.p.configureDebugVisualizer(self.p.COV_ENABLE_GUI, 0)
+            self.physics_client.resetSimulation(physicsClientId=self.cid)
+            self.physics_client.setPhysicsEngineParameter(deterministicOverlappingPairs=1, physicsClientId=self.cid)
+            self.physics_client.configureDebugVisualizer(self.physics_client.COV_ENABLE_GUI, 0)
             log.info(f"Connected to server with id: {self.cid}")
-            self.p.setTimeStep(1.0 / bullet_time_step, physicsClientId=self.cid)
+            self.physics_client.setTimeStep(1.0 / bullet_time_step, physicsClientId=self.cid)
             return cid
 
     def load(self):
         log.info("Resetting simulation")
-        self.p.resetSimulation(physicsClientId=self.cid)
+        self.physics_client.resetSimulation(physicsClientId=self.cid)
         log.info("Setting gravity")
-        self.p.setGravity(0, 0, -9.8, physicsClientId=self.cid)
+        self.physics_client.setGravity(0, 0, -9.8, physicsClientId=self.cid)
 
         self.robot.load()
         self.scene.load()
 
     def close(self):
         if self.ownsPhysicsClient:
-            print("disconnecting id %d from server" % self.cid)
-            if self.cid >= 0 and self.p is not None:
+            if self.cid >= 0 and self.physics_client is not None:
                 try:
-                    self.p.disconnect(physicsClientId=self.cid)
+                    self.physics_client.disconnect(physicsClientId=self.cid)
                 except TypeError:
                     pass
 
         else:
             print("does not own physics client id")
 
-    def render(self, mode="human"):
-        """render is gym compatibility function"""
-        obs: CalvinObservation = self._get_observation()
+    def update_prediction_marker(self, points: list):
+        self.camera_map["front"].update_marker_points(points)
 
+    def render(self, obs: CalvinObservation, info: dict = None, mode="human"):
+        """render is gym compatibility function"""
         if mode == "human":
             # Resize images to the desired size
-            rgb_static = cv2.resize(obs.front_rgb[:, :, ::-1], (500, 500))
-            depth_static = cv2.resize(obs.front_depth, (500, 500))
-            rgb_gripper = cv2.resize(obs.wrist_rgb[:, :, ::-1], (500, 500))
-            depth_gripper = cv2.resize(obs.wrist_depth, (500, 500))
+            rgb_static = cv2.resize(obs.rgb["front"], (500, 500))
+            # depth_static = cv2.resize(obs.depth["front"], (500, 500))
+            rgb_gripper = cv2.resize(obs.rgb["wrist"], (500, 500))
+            # depth_gripper = cv2.resize(obs.depth["wrist"], (500, 500))
 
-            # Convert depth images to BGR if they are single-channel
-            depth_static_color = cv2.cvtColor(depth_static, cv2.COLOR_GRAY2BGR)
-            depth_gripper_color = cv2.cvtColor(depth_gripper, cv2.COLOR_GRAY2BGR)
+            # Convert BGR to RGB for correct color display
+            rgb_static = cv2.cvtColor(rgb_static, cv2.COLOR_BGR2RGB)
+            rgb_gripper = cv2.cvtColor(rgb_gripper, cv2.COLOR_BGR2RGB)
+
+            # Normalize depth images and convert to BGR
+            # depth_static_normalized = cv2.normalize(depth_static, None, 0, 255, cv2.NORM_MINMAX)
+            # depth_static_normalized = np.uint8(depth_static_normalized)
+            # depth_static_color = cv2.cvtColor(depth_static_normalized, cv2.COLOR_GRAY2BGR)
+
+            # depth_gripper_normalized = cv2.normalize(depth_gripper, None, 0, 255, cv2.NORM_MINMAX)
+            # depth_gripper_normalized = np.uint8(depth_gripper_normalized)
+            # depth_gripper_color = cv2.cvtColor(depth_gripper_normalized, cv2.COLOR_GRAY2BGR)
 
             # Create a 2x2 grid of images
-            top_row = np.hstack((rgb_static, depth_static_color))
-            bottom_row = np.hstack((rgb_gripper, depth_gripper_color))
-            combined = np.vstack((top_row, bottom_row))
+            # top_row = np.hstack((rgb_static, depth_static_color))
+            # bottom_row = np.hstack((rgb_gripper, depth_gripper_color))
+            # combined = np.vstack((top_row, bottom_row))
+
+            combined = np.hstack((rgb_static, rgb_gripper))
+            # Add info text overlay
+            if info:
+                combined = self.add_info_overlay(combined, info)
 
             # Display the combined image
             cv2.imshow("Combined View", combined)
@@ -256,16 +242,101 @@ class CalvinEnv(gym.Env):
         else:
             raise NotImplementedError
 
-    def reset(self, robot_obs=None, scene_obs=None):
-        self.scene.reset(scene_obs)
-        self.robot.reset(robot_obs)
-        self.p.stepSimulation(physicsClientId=self.cid)
-        return self._get_observation(), self._get_info()
+    def add_info_overlay(self, img, info):
+        """Add info dictionary as text overlay on right side with black background"""
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7
+        font_color = (255, 255, 255)  # White text
+        thickness = 1
+        line_type = cv2.LINE_AA
+        margin = 20
+        line_height = 40
+        bg_padding = 10
+
+        # Starting position (right side)
+        x_start = img.shape[1] - 400  # 400px from right edge
+        y_start = 50
+
+        # Add timestamp with background
+        # if self.recording_start_time is None:
+        #    self.recording_start_time = datetime.now()
+        # elapsed = datetime.now() - self.recording_start_time
+        # time_text = f"Time: {elapsed.total_seconds():.2f}s"
+
+        # Draw text with background
+        img = self._draw_text_with_bg(
+            img, None, (x_start, y_start), font, font_scale, font_color, thickness, line_type, bg_padding
+        )
+        y = y_start + line_height
+
+        # Add info dictionary content
+        for key, value in info.items():
+            text = f"{key}: {value}"
+            img = self._draw_text_with_bg(
+                img, text, (x_start, y), font, font_scale, font_color, thickness, line_type, bg_padding
+            )
+            y += line_height
+
+            # Prevent overflow
+            if y > img.shape[0] - 50:
+                break
+
+        return img
+
+    def _draw_text_with_bg(self, img, text, pos, font, font_scale, color, thickness, line_type, padding):
+        """Helper function to draw text with background"""
+        x, y = pos
+        (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+
+        # Calculate background rectangle coordinates
+        bg_x1 = x - padding
+        bg_y1 = y - text_height - padding
+        bg_x2 = x + text_width + padding
+        bg_y2 = y + padding
+
+        # Draw background
+        cv2.rectangle(img, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 0, 0), -1)  # Black background
+
+        # Draw text
+        cv2.putText(img, text, (x, y), font, font_scale, color, thickness, line_type)
+
+        return img
 
     def seed(self, seed=None):
         self.np_random, seed = gym.utils.seeding.np_random(seed)
         # self.robot.np_random = self.np_random  # use the same np_randomizer for robot as for env
         return [seed]
+
+    def reset(self, robot_obs=None, scene_obs=None) -> Tuple[CalvinObservation, float, bool, dict]:
+        self.robot.reset(robot_obs)
+        self.scene.reset(scene_obs)
+        self.physics_client.stepSimulation(physicsClientId=self.cid)
+        obs = self._get_observation()
+        info = self._get_info()
+        reward, done = self.task.reset(obs)
+
+        # add values to observation for SceneObservation
+        obs.reward = reward
+        obs.done = done
+        # obs, reward, done, info
+        return obs, reward, done, info
+
+    def step(self, action, action_mode) -> Tuple[CalvinObservation, float, bool, dict]:
+        action = {"action": action, "type": action_mode}
+
+        self.robot.apply_action(action)
+        for i in range(self.action_repeat):
+            self.physics_client.stepSimulation(physicsClientId=self.cid)
+        self.scene.step()
+        obs = self._get_observation()
+        info = self._get_info()
+        reward, done = self.task.step(obs)
+
+        # add values to observation for SceneObservation
+        obs.reward = reward
+        obs.done = done
+        # obs, reward, done, info
+        return obs, reward, done, info
 
     def _get_observation(
         self,
@@ -273,14 +344,11 @@ class CalvinEnv(gym.Env):
         has_gripper_touch_forces=True,
     ) -> CalvinObservation:
 
-        camera_map = {}
-        for cam in self.cameras:
-            camera_map[cam.name] = cam
-        gripper_rgb, gripper_depth, gripper_pcd, gripper_mask = camera_map["gripper"].render()
-        static_rgb, static_depth, static_pcd, static_mask = camera_map["static"].render()
+        wrist_rgb, wrist_depth, wrist_pcd, wrist_mask = self.camera_map["wrist"].render()
+        front_rgb, front_depth, front_pcd, front_mask = self.camera_map["front"].render()
 
         _, robot_obs = self.robot.get_observation()  # get state observation
-        scene_obs = self.scene.get_low_dim_state()
+        # scene_obs = self.scene.get_low_dim_state()
         arm_joint_forces = robot_obs["arm_joint_forces"]
         arm_joint_velocities = robot_obs["arm_joint_velocities"]
         arm_joint_positions = robot_obs["arm_joint_positions"]
@@ -299,50 +367,55 @@ class CalvinEnv(gym.Env):
                 ee_forces_flat.extend(eef)
             ee_forces_flat = np.array(ee_forces_flat)
 
-        low_dim_state_tensor = dict_to_tensordict(
-            {f"obj{i:03d}": torch.Tensor(state) for i, state in enumerate(scene_obs)},
-            # batch_size=empty_batchsize,
-        )
+        rgb_dict: dict = {
+            "wrist": wrist_rgb,
+            "front": front_rgb,
+        }
+        depth_dict: dict = {
+            "wrist": wrist_depth,
+            "front": front_depth,
+        }
+        pcd_dict: dict = {
+            "wrist": wrist_pcd,
+            "front": front_pcd,
+        }
+        mask_dict: dict = {
+            "wrist": wrist_mask,
+            "front": front_mask,
+        }
+        camera_settings = self._get_misc()
 
-        print(f"Low Dim State Tensor: {low_dim_state_tensor}")
-
+        extr_dict: dict = {
+            "wrist": camera_settings["wrist"]["extrinsics"],
+            "front": camera_settings["front"]["extrinsics"],
+        }
+        intr_dict: dict = {
+            "wrist": camera_settings["wrist"]["intrinsics"],
+            "front": camera_settings["front"]["intrinsics"],
+        }
         obs = CalvinObservation(
-            wrist_rgb=gripper_rgb,
-            wrist_depth=gripper_depth,
-            wrist_point_cloud=gripper_pcd,
-            front_rgb=static_rgb,
-            front_depth=static_depth,
-            front_point_cloud=static_pcd,
-            wrist_mask=gripper_mask,
-            front_mask=static_mask,
-            joint_velocities=self.robot.joint_velocities_noise.apply(np.array(arm_joint_velocities)),
-            joint_positions=self.robot.joint_positions_noise.apply(np.array(arm_joint_positions)),
+            camera_names=["wrist", "front"],
+            rgb=rgb_dict,
+            depth=depth_dict,
+            pcd=pcd_dict,
+            mask=mask_dict,
+            extr=extr_dict,
+            intr=intr_dict,
+            object_poses=self.scene.get_dictionary_object_poses(),
+            object_states=self.scene.get_dictionary_object_states(),
+            low_dim_object_poses=self.scene.get_low_dim_object_poses(),
+            low_dim_object_states=self.scene.get_low_dim_object_states(),
+            joint_vel=self.robot.joint_velocities_noise.apply(np.array(arm_joint_velocities)),
+            joint_pos=self.robot.joint_positions_noise.apply(np.array(arm_joint_positions)),
             joint_forces=joint_forces,
-            gripper_open=robot_obs["gripper_opening_state"],
             gripper_matrix=robot_obs["gripper_view_matrix"],
             gripper_pose=robot_obs["gripper_pose"],
+            gripper_state=robot_obs["gripper_opening_state"],
+            tcp_pose=robot_obs["tcp_pose"],
+            tcp_state=robot_obs["tcp_state"],
             gripper_touch_forces=ee_forces_flat,
             gripper_joint_positions=robot_obs["gripper_finger_positions"],
-            task_low_dim_state=self.scene.get_low_dim_state(),
-            misc=self._get_misc(),
         )
-        return obs
-
-    def _get_state_obs(self):
-        """
-        Collect state observation dict
-        --state_obs
-            --robot_obs
-                --robot_state_full
-                    -- [tcp_pos, tcp_orn, gripper_opening_width]
-                --gripper_opening_width
-                --arm_joint_states
-                --gripper_action}
-            --scene_obs
-        """
-        robot_obs, robot_info = self.robot.get_observation()
-        scene_obs = self.scene.get_obs()
-        obs = {"robot_obs": robot_obs, "scene_obs": scene_obs, "robot_info": robot_info}
         return obs
 
     def _get_info(self):
@@ -353,12 +426,12 @@ class CalvinEnv(gym.Env):
         return info
 
     def _get_misc(self):
-        def _get_cam_data(cam: Camera, name: str):
+        def _get_cam_data(cam: Camera):
             d = {
-                "%s_extrinsics" % name: cam.viewMatrix,
-                "%s_intrinsics" % name: cam.projectionMatrix,
-                "%s_near" % name: cam.nearval,
-                "%s_far" % name: cam.farval,
+                "extrinsics": np.array(cam.viewMatrix).reshape((4, 4)).T,
+                "intrinsics": np.array(cam.projectionMatrix).reshape((3, 3)).T,
+                "near": cam.nearval,
+                "far": cam.farval,
             }
             return d
 
@@ -366,26 +439,11 @@ class CalvinEnv(gym.Env):
         for cam in self.cameras:
             camera_dict[cam.name] = cam
 
-        misc = _get_cam_data(camera_dict["static"], "front_camera")
-        misc.update(_get_cam_data(camera_dict["gripper"], "wrist_camera"))
+        misc = {}
+        misc.update({"wrist": _get_cam_data(camera_dict["wrist"])})
+        misc.update({"front": _get_cam_data(camera_dict["front"])})
         misc.update({"variation_index": self.seed()})
-
-        # if self._joint_position_action is not None:
-        # Store the actual requested joint positions during demo collection
-        #    misc.update({"joint_position_action": self._joint_position_action})
-        # joint_poses = [j.get_pose() for j in self.robot.arm.joints]
-        # misc.update({"joint_poses": joint_poses})
         return misc
-
-    def step(self, action):
-        self.robot.apply_action(action)
-        for i in range(self.action_repeat):
-            self.p.stepSimulation(physicsClientId=self.cid)
-        self.scene.step()
-        obs = self._get_observation()
-        info = self._get_info()
-        # obs, reward, done, info
-        return obs, 0, False, info
 
     def reset_from_storage(self, filename):
         """
@@ -400,7 +458,7 @@ class CalvinEnv(gym.Env):
         self.robot.reset_from_storage(data["robot"])
         self.scene.reset_from_storage(data["scene"])
 
-        self.p.stepSimulation(physicsClientId=self.cid)
+        self.physics_client.stepSimulation(physicsClientId=self.cid)
 
         return data["state_obs"], data["done"], data["info"]
 
@@ -431,45 +489,25 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
     return env
 
 
-@hydra.main(config_path="../../conf", config_name="config_motion_data_collection")
-def run_env(cfg):
-    env = hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
-
-    env.reset()
-    while True:
-        action = {"action": np.array((0.0, 0, 0, 0, 0, 0, 1)), "type": "cartesian_rel"}
-        # cartesian actions can also be input directly as numpy arrays
-        # action = np.array((0., 0, 0, 0, 0, 0, 1))
-
-        # relative action in joint space
-        # action = {"action": np.array((0., 0, 0, 0, 0, 0, 0, 1)),
-        #           "type": "joint_rel"}
-
-        env.step(action)
-        # env.render()
-        time.sleep(0.01)
-
-
-def get_env_from_cfg():
+def get_env_from_cfg(task: str, eval: bool = False) -> CalvinEnvironment:
     """Bypass Hydra's execution context and create the environment manually."""
-    with hydra.initialize(config_path="../../conf"):
-        cfg = hydra.compose(config_name="config_motion_data_collection")
-        env = hydra.utils.instantiate(cfg.env, show_gui=False, use_vr=False, use_scene_info=True)
-
-        env = CalvinEnv(
+    with hydra.initialize(config_path="../assets/conf", version_base="1.1"):
+        config_name = "master_config_eval" if eval else "master_config"
+        cfg = hydra.compose(config_name=config_name)
+        # env = hydra.utils.instantiate(cfg.env, show_gui=False, use_vr=False, use_scene_info=True)
+        env = CalvinEnvironment(
             robot_cfg=cfg.robot,  # Robot basic cfg load here
             seed=cfg.seed,  # ignore for now
-            use_vr=False,  # correct
-            bullet_time_step=cfg.bullet_time_step,  # ignore for now
+            use_vr=cfg.env.use_vr,  # correct
+            bullet_time_step=cfg.env.bullet_time_step,  # ignore for now
             cameras=cfg.cameras,
-            show_gui=False,
+            show_gui=cfg.env.show_gui,
             scene_cfg=cfg.scene,
-            use_scene_info=True,
-            use_egl=False,
+            use_scene_info=cfg.env.use_scene_info,
+            use_egl=cfg.env.use_egl,
+            control_freq=cfg.env.control_freq,
+            task=task,
+            action_mode="action_mode",
         )
         assert env is not None, "Failed to create CustomSimEnv"
         return env
-
-
-if __name__ == "__main__":
-    run_env()

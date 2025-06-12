@@ -1,3 +1,6 @@
+import numpy as np
+
+
 MAX_FORCE = 4
 
 
@@ -35,6 +38,12 @@ class Door:
     def get_state(self):
         joint_state = self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)
         return float(joint_state[0])
+
+    def get_pose(self, euler_obs=False):
+        pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
+        if euler_obs:
+            orn = self.p.getEulerFromQuaternion(orn)
+        return np.concatenate([pos, orn])
 
     def get_info(self):
         return {"current_state": self.get_state()}

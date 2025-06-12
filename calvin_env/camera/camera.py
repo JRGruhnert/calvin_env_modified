@@ -15,8 +15,8 @@ class Camera:
 
         # mask = self.rgb_image_to_mask(image)
 
-        ptc = self.distance_map_to_point_cloud(depth, self.fov, self.width, self.height)
-        ptc = None  # TODO Make it parameter. I dont need it
+        ptc = self.distance_map_to_point_cloud(depth, self.fov, self._width, self._height)
+        # ptc = None  # TODO Make it parameter. I dont need it
         return rgb, depth, ptc, mask  # Now also returning the segmentation mask
 
     def _render(self):
@@ -74,7 +74,7 @@ class Camera:
         world_pix_tran = persp_m @ view_m @ point
         world_pix_tran = world_pix_tran / world_pix_tran[-1]  # divide by w
         world_pix_tran[:3] = (world_pix_tran[:3] + 1) / 2
-        x, y = world_pix_tran[0] * self.width, (1 - world_pix_tran[1]) * self.height
+        x, y = world_pix_tran[0] * self._width, (1 - world_pix_tran[1]) * self._height
         x, y = np.floor(x).astype(int), np.floor(y).astype(int)
         return (x, y)
 
@@ -93,9 +93,9 @@ class Camera:
 
         u, v = point
         z = depth_img[v, u]
-        foc = self.height / (2 * np.tan(np.deg2rad(self.fov) / 2))
-        x = (u - self.width // 2) * z / foc
-        y = -(v - self.height // 2) * z / foc
+        foc = self._height / (2 * np.tan(np.deg2rad(self.fov) / 2))
+        x = (u - self._width // 2) * z / foc
+        y = -(v - self._height // 2) * z / foc
         z = -z
         world_pos = T_world_cam @ np.array([x, y, z, 1])
         if not homogeneous:
@@ -108,7 +108,7 @@ class Camera:
 
     @property
     def projectionMatrix(self):
-        return self._projectionMatrix
+        return calculate_intrinsic_matrix(self.fov, self._width, self._height)
 
     @property
     def nearval(self):
@@ -121,3 +121,25 @@ class Camera:
     @property
     def name(self):
         return self._name
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def height(self):
+        return self._height
+
+
+def calculate_intrinsic_matrix(fov_y, width, height):
+    # Convert field of view from degrees to radians
+    fov_y_rad = np.deg2rad(fov_y)
+    # Calculate focal length in pixels
+    fy = height / (2 * np.tan(fov_y_rad / 2))
+    fx = fy  # Assuming square pixels
+    # Principal point (image center)
+    cx = width / 2
+    cy = height / 2
+    # Construct the intrinsic matrix
+    K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+    return K

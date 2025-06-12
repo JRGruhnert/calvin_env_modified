@@ -68,9 +68,21 @@ class MovableObject(BaseObject):
                 raise ValueError
         return initial_pos, initial_orn
 
+    def _relative_velocity_to_gripper(self, object_id) -> float:
+        # Get linear velocities of gripper and object
+        object_lin_vel, _ = self.p.getBaseVelocity(object_id)
+
+        # Compute velocity difference magnitude
+        object_speed = np.linalg.norm(np.array(object_lin_vel))
+
+        return object_speed  # If object moves with gripper
+
     def get_state(self):
+        return float(self._relative_velocity_to_gripper(self.uid))
+
+    def get_pose(self, euler_obs=False):
         pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
-        if self.euler_obs:
+        if euler_obs:
             orn = self.p.getEulerFromQuaternion(orn)
         return np.concatenate([pos, orn])
 

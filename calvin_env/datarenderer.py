@@ -248,7 +248,13 @@ def worker_run(load_dir, rendering_cfg, proc_num, start_frame, stop_frame, episo
 
     log.info(f"[{proc_num}] Entering Loop")
     frame_counter = 0
-    rgbs, depths, actions, robot_obs, scene_obs, = (
+    (
+        rgbs,
+        depths,
+        actions,
+        robot_obs,
+        scene_obs,
+    ) = (
         [],
         [],
         [],

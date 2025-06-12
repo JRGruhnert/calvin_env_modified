@@ -17,19 +17,21 @@ import pybullet_planning as planner
 # A logger for this file
 log = logging.getLogger(__name__)
 
+
 class PandaArmMotionPlanningSolver:
     """
     pyBullet MotionPlanner for the Panda Arm
     """
+
     def __init__(self, env, limit_angle, visualize_vr_pos, reset_button_queue_len):
         self.env = env  # Speichern der Umgebung
         self.robot = env.robot  # Zugriff auf den Roboter
         self.p = env.p  # Zugriff auf PyBullet
         # * zoom in so we can see it, this is optional
-        camera_base_pt = (0,0,0)
+        camera_base_pt = (0, 0, 0)
         camera_pt = np.array(camera_base_pt) + np.array([0.1, -0.1, 0.1])
         planner.set_camera_pose(tuple(camera_pt), camera_base_pt)
-        
+
         self.visualize_vr_pos = visualize_vr_pos
         self.vr_pos_uid = None
         if visualize_vr_pos:
@@ -60,7 +62,6 @@ class PandaArmMotionPlanningSolver:
 
         return route
 
-    
     def step(self, state_obs):
         """
         Collect state observation dict
@@ -72,7 +73,7 @@ class PandaArmMotionPlanningSolver:
                 --arm_joint_states
                 --gripper_action}
             --scene_obs
-        
+
         robot_obs, robot_info = self.robot.get_observation()
         scene_obs = self.scene.get_obs()
         obs = {"robot_obs": robot_obs, "scene_obs": scene_obs}
@@ -91,12 +92,11 @@ class PandaArmMotionPlanningSolver:
         self.prev_action = desired_ee_pos, desired_ee_orn, gripper_action
         return desired_ee_pos, desired_ee_orn, gripper_action
 
-
     def step(self, action):
         if isinstance(action, dict) and "motion_plan" in action:
             # Falls die Aktion eine geplante Trajektorie enthält, iteriere darüber
             for joint_target in action["motion_plan"]:
-                self.robot.apply_action(joint_target)  
+                self.robot.apply_action(joint_target)
                 self.p.stepSimulation(physicsClientId=self.cid)
                 time.sleep(0.01)  # Zeitverzögerung für Stabilität
 
@@ -110,4 +110,3 @@ class PandaArmMotionPlanningSolver:
         obs = self.get_obs()
         info = self.get_info()
         return obs, 0, False, info
-

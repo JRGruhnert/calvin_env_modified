@@ -1,5 +1,7 @@
 from enum import Enum
 
+import numpy as np
+
 MAX_FORCE = 4
 
 
@@ -62,15 +64,25 @@ class Button:
         self.prev_is_pressed = self._is_pressed
 
     @property
-    def _is_pressed(self):
+    def _is_pressed(self, s=None):
+        joint_state = s
+        if joint_state is None:
+            joint_state = self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0]
+
         if self.initial_state <= self.trigger_threshold:
-            return self.get_state() > self.trigger_threshold
+            return joint_state > self.trigger_threshold
         elif self.initial_state > self.trigger_threshold:
-            return self.get_state() < self.trigger_threshold
+            return joint_state < self.trigger_threshold
 
     def get_state(self):
         """return button joint state"""
-        return float(self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0])
+        return float(self.state.value)
+
+    def get_pose(self, euler_obs=False):
+        pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
+        if euler_obs:
+            orn = self.p.getEulerFromQuaternion(orn)
+        return np.concatenate([pos, orn])
 
     def get_info(self):
         return {"joint_state": self.get_state(), "logical_state": self.state.value}
