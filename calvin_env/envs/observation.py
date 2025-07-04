@@ -1,16 +1,5 @@
 import numpy as np
 import torch
-import pybullet as p
-from tapas_gmm.policy.models.master_project.hrl_observation import HRLPolicyObservation
-
-from tapas_gmm.utils.observation import (
-    CameraOrder,
-    SceneObservation,
-    SingleCamObservation,
-    dict_to_tensordict,
-    empty_batchsize,
-)
-
 
 class CalvinObservation(object):
     """Storage for both visual and low-dimensional observations."""
@@ -40,6 +29,7 @@ class CalvinObservation(object):
         gripper_matrix: np.ndarray,
         gripper_joint_positions: np.ndarray,
         gripper_touch_forces: np.ndarray,
+        scene_obs: np.ndarray
     ):
         self._camera_names = camera_names
         self._rgb = rgb
@@ -62,11 +52,16 @@ class CalvinObservation(object):
         self._gripper_matrix = gripper_matrix
         self._gripper_joint_positions = gripper_joint_positions
         self._gripper_touch_forces = gripper_touch_forces
+        self._scene_obs = scene_obs
 
         self._action = None
         self._reward = None
         self._done = None
 
+    @property
+    def scene_obs(self) -> np.ndarray:
+        return self._scene_obs
+    
     @property
     def camera_names(self) -> list[str]:
         """
@@ -247,6 +242,10 @@ class CalvinObservation(object):
         """
         return self._tcp_pose
 
+    @ee_pose.setter
+    def ee_pose(self, pose: np.ndarray) -> None:
+        self._tcp_pose = pose
+
     @property
     def ee_state(self) -> np.ndarray:
         """
@@ -330,87 +329,3 @@ class CalvinObservation(object):
             The done flag to set.
         """
         self._done = done
-
-    def to_rlbench_format(self) -> SceneObservation:  # type: ignore
-        """
-        Convert the observation from the environment to a SceneObservation. This format is used for TAPAS.
-
-        Returns
-        -------
-        SceneObservation
-            The observation in common format as SceneObservation.
-        """
-        # TODO: IS conversionb correct?
-        if self.action is None:
-            action = None
-        else:
-            action = torch.Tensor(self.action)
-        if self.reward is None:
-            reward = torch.Tensor([0.0])
-        else:
-            reward = torch.Tensor([self.reward])
-
-        camera_obs = {}
-
-        for cam in self._camera_names:
-            self._rgb[cam] = self._rgb[cam].transpose((2, 0, 1)) / 255
-            self._mask[cam] = self._mask[cam].astype(int)
-
-            camera_obs[cam] = SingleCamObservation(
-                **{
-                    "rgb": torch.Tensor(self._rgb[cam]),
-                    "depth": torch.Tensor(self._depth[cam]),
-                    "mask": torch.Tensor(self._mask[cam]).to(torch.uint8),
-                    "extr": torch.Tensor(self._extr[cam]),
-                    "intr": torch.Tensor(self._intr[cam]),
-                },
-                batch_size=empty_batchsize,
-            )
-
-        multicam_obs = dict_to_tensordict({"_order": CameraOrder._create(self._camera_names)} | camera_obs)
-
-        joint_pos = torch.Tensor(self._joint_pos)
-        joint_vel = torch.Tensor(self._joint_vel)
-        ee_pose = torch.Tensor(self.ee_pose)
-        ee_state = torch.Tensor([self.ee_state])
-
-        object_pose_len = 7
-        object_poses_list = self._low_dim_object_poses.reshape(-1, object_pose_len)
-
-        object_poses = dict_to_tensordict(
-            {f"obj{i:03d}": torch.Tensor(pose) for i, pose in enumerate(object_poses_list)},
-        )
-
-        object_state_len = 1
-        object_states_list = self._low_dim_object_states.reshape(-1, object_state_len)
-
-        object_states = dict_to_tensordict(
-            {f"obj{i:03d}": torch.Tensor(state) for i, state in enumerate(object_states_list)},
-        )
-
-        obs = SceneObservation(
-            feedback=reward,
-            action=action,
-            cameras=multicam_obs,
-            ee_pose=ee_pose,
-            gripper_state=ee_state,
-            object_poses=object_poses,
-            object_states=object_states,
-            joint_pos=joint_pos,
-            joint_vel=joint_vel,
-            batch_size=empty_batchsize,
-        )
-        return obs
-
-    def to_hrl_policy_format(self) -> HRLPolicyObservation:
-        """
-        Convert the observation from the environment to a HRLPolicyObservation.
-
-        Returns
-        -------
-        HRLPolicyObservation
-            The observation in common format as HRLPolicyObservation.
-        """
-        return HRLPolicyObservation(
-            ee_pose=self.ee_pose, object_poses=self.object_poses, object_states=self.object_states
-        )

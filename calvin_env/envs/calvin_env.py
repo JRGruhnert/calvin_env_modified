@@ -16,11 +16,9 @@ import hydra
 import numpy as np
 import pybullet as p
 import pybullet_utils.bullet_client as bc
-import torch
 
 import calvin_env
 from calvin_env.camera.camera import Camera
-from calvin_env.envs.observation import CalvinObservation
 from calvin_env.envs.master_tasks.calvin_task import (
     CalvinTask,
     PressButton,
@@ -36,6 +34,7 @@ from calvin_env.envs.master_tasks.calvin_task import (
     CloseSwitch,
     MoveToLever,
 )
+from calvin_env.envs.observation import CalvinObservation
 from calvin_env.robot.robot import Robot
 from calvin_env.scene.master_scene import Scene
 from calvin_env.utils.utils import FpsController, get_git_commit_hash
@@ -63,6 +62,7 @@ registered_tasks: dict[str, CalvinTask] = {
     "OpenSwitchr": OpenSwitch,
     "CloseSwitch": CloseSwitch,
     "MoveToLever": MoveToLever,
+    "EmptyTask": CalvinTask,  # Default task if none is specified
 }
 
 
@@ -79,9 +79,9 @@ class CalvinEnvironment(gym.Env):
         scene_cfg,
         use_scene_info,
         use_egl,
-        task,
         control_freq,
         action_mode,
+        task = None,
     ):
         self.physics_client = p
         # for calculation of FPS
@@ -106,7 +106,7 @@ class CalvinEnvironment(gym.Env):
             scene_cfg, p=self.physics_client, cid=self.cid, np_random=self.np_random
         )
 
-        self.task: CalvinTask = registered_tasks.get(task)()
+        #self.task: CalvinTask = registered_tasks.get(task)()
         # Load Env
         self.load()
 
@@ -307,13 +307,13 @@ class CalvinEnvironment(gym.Env):
         # self.robot.np_random = self.np_random  # use the same np_randomizer for robot as for env
         return [seed]
 
-    def reset(self, robot_obs=None, scene_obs=None) -> Tuple[CalvinObservation, float, bool, dict]:
+    def reset(self, robot_obs=None, scene_obs=None, static=True) -> Tuple[CalvinObservation, float, bool, dict]:
         self.robot.reset(robot_obs)
-        self.scene.reset(scene_obs)
+        self.scene.reset(scene_obs, static)
         self.physics_client.stepSimulation(physicsClientId=self.cid)
         obs = self._get_observation()
         info = self._get_info()
-        reward, done = self.task.reset(obs)
+        reward, done = 0.0, False #self.task.reset(obs)
 
         # add values to observation for SceneObservation
         obs.reward = reward
@@ -330,7 +330,7 @@ class CalvinEnvironment(gym.Env):
         self.scene.step()
         obs = self._get_observation()
         info = self._get_info()
-        reward, done = self.task.step(obs)
+        reward, done = 0.0, False #self.task.step(obs)
 
         # add values to observation for SceneObservation
         obs.reward = reward
@@ -348,6 +348,7 @@ class CalvinEnvironment(gym.Env):
         front_rgb, front_depth, front_pcd, front_mask = self.camera_map["front"].render()
 
         _, robot_obs = self.robot.get_observation()  # get state observation
+        scene_obs = self.scene.get_obs()
         # scene_obs = self.scene.get_low_dim_state()
         arm_joint_forces = robot_obs["arm_joint_forces"]
         arm_joint_velocities = robot_obs["arm_joint_velocities"]
@@ -415,6 +416,7 @@ class CalvinEnvironment(gym.Env):
             tcp_state=robot_obs["tcp_state"],
             gripper_touch_forces=ee_forces_flat,
             gripper_joint_positions=robot_obs["gripper_finger_positions"],
+            scene_obs=scene_obs,
         )
         return obs
 
@@ -489,7 +491,7 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
     return env
 
 
-def get_env_from_cfg(task: str, eval: bool = False) -> CalvinEnvironment:
+def get_env_from_cfg(eval: bool = False) -> CalvinEnvironment:
     """Bypass Hydra's execution context and create the environment manually."""
     with hydra.initialize(config_path="../assets/conf", version_base="1.1"):
         config_name = "master_config_eval" if eval else "master_config"
@@ -506,7 +508,6 @@ def get_env_from_cfg(task: str, eval: bool = False) -> CalvinEnvironment:
             use_scene_info=cfg.env.use_scene_info,
             use_egl=cfg.env.use_egl,
             control_freq=cfg.env.control_freq,
-            task=task,
             action_mode="action_mode",
         )
         assert env is not None, "Failed to create CustomSimEnv"

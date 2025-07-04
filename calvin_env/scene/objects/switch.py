@@ -71,6 +71,9 @@ class Switch:
     def get_state(self):
         """return button joint state"""
         return float(self.state.value)
+    
+    def get_joint_state(self):
+        return self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0]
 
     def get_pose(self, euler_obs=False):
         pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
@@ -79,7 +82,7 @@ class Switch:
         return np.concatenate([pos, orn])
 
     def get_info(self):
-        return {"joint_state": self.get_state(), "logical_state": self.state.value}
+        return {"joint_state": self.get_joint_state(), "logical_state": self.state.value}
 
     def add_effect(self, light):
         self.light = light

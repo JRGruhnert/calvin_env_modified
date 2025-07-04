@@ -195,7 +195,6 @@ def set_static_cams_from_gui(cfg, load_dir, max_frames):
                     c.projectionMatrix = p.computeProjectionMatrixFOV(
                         fov=c.fov, aspect=c.aspect, nearVal=c.nearval, farVal=c.farval
                     )
-                    print(c.fov)
                     fov = c.fov
                 if k == ord("x"):
                     c = env.cameras[cam_index]
@@ -203,7 +202,6 @@ def set_static_cams_from_gui(cfg, load_dir, max_frames):
                     c.projectionMatrix = p.computeProjectionMatrixFOV(
                         fov=c.fov, aspect=c.aspect, nearVal=c.nearval, farVal=c.farval
                     )
-                    print(c.fov)
                     fov = c.fov
                 if k == ord("r"):
                     c = env.cameras[cam_index]

@@ -1,6 +1,4 @@
-from loguru import logger
 import numpy as np
-from overrides import override
 from calvin_env.envs.observation import CalvinObservation
 from calvin_env.envs.master_tasks.tapas_task import TapasTask
 
@@ -77,10 +75,10 @@ class CalvinTask:
         return self.dense_reward, self.is_done
 
     def _step(self, obs: CalvinObservation) -> tuple[float, bool]:
-        raise NotImplementedError
+        raise NotImplementedError("This method should be implemented in the subclass.")
 
     def _calc_sparse_reward(self, obs: CalvinObservation) -> float:
-        raise NotImplementedError
+        raise NotImplementedError("This method should be implemented in the subclass.")
 
     def extract_partition_a_nodes(self) -> list[TapasTask]:
         """
@@ -106,7 +104,6 @@ class CalvinTask:
 
 class PressButton(CalvinTask):
 
-    @override
     def _step(self, obs: CalvinObservation) -> tuple[float, bool]:
         # 'base__slide', 'base__drawer', 'base__button', 'base__switch',
         # 'lightbulb', 'led', 'block_red', 'block_blue', 'block_pink'
@@ -136,7 +133,6 @@ class PressButton(CalvinTask):
                 norm = (start_distance - current_distance) / start_distance
                 return min(0.8, norm), False
 
-    @override
     def _calc_sparse_reward(self, obs: CalvinObservation) -> float:
         return 1.0 if self._is_done else 0.0
 
@@ -160,11 +156,7 @@ class CloseGripper(CalvinTask):
 class OpenDrawer(CalvinTask):
     def _step(self, obs) -> tuple[float, bool]:
         drawer_pose = obs.object_poses.get("base__drawer")
-        print("Drawer Pose")
-        print(drawer_pose)
         drawer_state = obs.object_states.get("base__drawer")
-        print("Drawer State")
-        print(drawer_state)
         # TODO: implement reward and success flag
         return 0.0, True
 
@@ -177,11 +169,7 @@ class CloseDrawer(CalvinTask):
 
     def _step(self, obs) -> tuple[float, bool]:
         drawer_pose = obs.object_poses.get("base__drawer")
-        print("Drawer Pose")
-        print(drawer_pose)
         drawer_state = obs.object_states.get("base__drawer")
-        print("Drawer State")
-        print(drawer_state)
         # TODO: implement reward and success flag
         return 0.0, True
 

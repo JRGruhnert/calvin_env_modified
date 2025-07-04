@@ -76,8 +76,6 @@ class Robot:
         self.use_target_pose = use_target_pose
         # self.reconfigure = False
 
-        print("filepath", self.filename)
-
     def load(self):
         self.robot_uid = p.loadURDF(
             fileName=self.filename,
@@ -353,7 +351,6 @@ class Robot:
 
     def apply_action(self, action):
         jnt_ps = None
-
         if action["type"] == "joint_rel":
             current_joint_states = np.array(list(zip(*p.getJointStates(self.robot_uid, self.arm_joint_ids)))[0])
             assert len(action["action"]) == 8

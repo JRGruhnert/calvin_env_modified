@@ -87,15 +87,11 @@ class Scene:
 
         self.p.loadURDF(os.path.join(self.data_path, "plane/plane.urdf"), physicsClientId=self.cid)
 
-    def reset(self, scene_obs=None):
+    def reset(self, scene_obs=None, static=True):
         """Reset objects and doors to initial position."""
         if scene_obs is None:
             for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights):
-                print(obj.name)
-                if obj.name == "base__drawer":
-                    obj.reset(0.22)
-                else:
-                    obj.reset()
+                obj.reset()
             self.reset_movable_objects()
         else:
             door_info, button_info, switch_info, light_info, obj_info = self.parse_scene_obs(scene_obs)
@@ -108,8 +104,11 @@ class Scene:
                 button.reset(state)
             for switch, state in zip(self.switches, switch_info):
                 switch.reset(state)
-            for obj, state in zip(self.movable_objects, obj_info):
-                obj.reset(state)
+            if static:
+                self.reset_movable_objects()
+            else:
+                for obj, state in zip(self.movable_objects, obj_info):
+                    obj.reset(state)
 
     def parse_scene_obs(self, scene_obs):
         # an object pose is composed of position (3) and orientation (4 for quaternion)  / (3 for euler)
@@ -295,6 +294,16 @@ class Scene:
 
     def get_objects(self):
         return itertools.chain(self.fixed_objects, self.movable_objects)
+
+    def get_obs(self):
+        """Return state information of the doors, drawers and shelves."""
+        door_states = [door.get_state() for door in self.doors]
+        button_states = [button.get_state() for button in self.buttons]
+        switch_states = [switch.get_joint_state() for switch in self.switches]
+        light_states = [light.get_state() for light in self.lights]
+        object_poses = list(itertools.chain(*[obj.get_pose() for obj in self.movable_objects]))
+
+        return np.concatenate([door_states, button_states, switch_states, light_states, object_poses])
 
     def serialize(self):
         data = {
