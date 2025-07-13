@@ -220,6 +220,9 @@ class Robot:
         tcp_pose = np.concatenate((tcp_pos, tcp_orn))
         tcp_state = np.concatenate([tcp_pos, tcp_orn])
 
+        #print(f"Gripper pose: {gripper_pose}")
+        #print(f"TCP pose: {tcp_pose}")
+
         # Convert quaternion to rotation matrix (returned as 9 values in row-major order)
         R = p.getMatrixFromQuaternion(orientation)
         # The rotation matrix is:
@@ -299,7 +302,7 @@ class Robot:
             "gripper_view_matrix": gripper_view_matrix,
             "gripper_pose": gripper_pose,
             "tcp_pose": tcp_pose,
-            "tcp_state": self.gripper_action,
+            "tcp_state": gripper_opening_state,
             "uid": self.robot_uid,
             "contacts": p.getContactPoints(bodyA=self.robot_uid, physicsClientId=self.cid),
         }

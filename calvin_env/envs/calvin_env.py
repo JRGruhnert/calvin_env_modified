@@ -195,16 +195,21 @@ class CalvinEnvironment(gym.Env):
             if self.cid >= 0 and self.physics_client is not None:
                 try:
                     self.physics_client.disconnect(physicsClientId=self.cid)
-                except TypeError:
+                except (TypeError, Exception):
+                    # Catch both TypeError and any other PyBullet exceptions
+                    # like "Not connected to physics server"
                     pass
-
+                finally:
+                    # Clean up the connection ID to prevent repeated attempts
+                    self.cid = -1
+                    self.physics_client = None
         else:
             print("does not own physics client id")
 
     def update_prediction_marker(self, points: list):
         self.camera_map["front"].update_marker_points(points)
 
-    def render(self, obs: CalvinObservation, info: dict = None, mode="human"):
+    def render(self, obs: CalvinObservation, info: dict[str, bool] = None, mode="human"):
         """render is gym compatibility function"""
         if mode == "human":
             # Resize images to the desired size
@@ -242,10 +247,10 @@ class CalvinEnvironment(gym.Env):
         else:
             raise NotImplementedError
 
-    def add_info_overlay(self, img, info):
+    def add_info_overlay(self, img, info: dict[str, bool]) -> np.ndarray:
         """Add info dictionary as text overlay on right side with black background"""
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.7
+        font_scale = 0.5
         font_color = (255, 255, 255)  # White text
         thickness = 1
         line_type = cv2.LINE_AA
@@ -271,7 +276,11 @@ class CalvinEnvironment(gym.Env):
 
         # Add info dictionary content
         for key, value in info.items():
-            text = f"{key}: {value}"
+            if value:
+                val = "-"
+            else:
+                val = "x"
+            text = f"{val}|{key}"
             img = self._draw_text_with_bg(
                 img, text, (x_start, y), font, font_scale, font_color, thickness, line_type, bg_padding
             )
@@ -491,11 +500,17 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
     return env
 
 
-def get_env_from_cfg(eval: bool = False) -> CalvinEnvironment:
+def get_env_from_cfg(eval: bool = False, vis: bool = True) -> CalvinEnvironment:
     """Bypass Hydra's execution context and create the environment manually."""
     with hydra.initialize(config_path="../assets/conf", version_base="1.1"):
         config_name = "master_config_eval" if eval else "master_config"
         cfg = hydra.compose(config_name=config_name)
+        if vis:
+            show_gui = True
+            use_egl = False
+        else:
+            show_gui = False
+            use_egl = True
         # env = hydra.utils.instantiate(cfg.env, show_gui=False, use_vr=False, use_scene_info=True)
         env = CalvinEnvironment(
             robot_cfg=cfg.robot,  # Robot basic cfg load here
@@ -503,10 +518,10 @@ def get_env_from_cfg(eval: bool = False) -> CalvinEnvironment:
             use_vr=cfg.env.use_vr,  # correct
             bullet_time_step=cfg.env.bullet_time_step,  # ignore for now
             cameras=cfg.cameras,
-            show_gui=cfg.env.show_gui,
+            show_gui=show_gui,
             scene_cfg=cfg.scene,
             use_scene_info=cfg.env.use_scene_info,
-            use_egl=cfg.env.use_egl,
+            use_egl=use_egl,
             control_freq=cfg.env.control_freq,
             action_mode="action_mode",
         )
