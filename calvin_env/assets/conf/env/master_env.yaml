@@ -1,0 +1,13 @@
+_target_: tapas_gmm.calvin_project.calvin.envs.master_env.MasterEnvironment
+_recursive_: false
+cameras: ${cameras}
+seed: 0
+bullet_time_step: 240.0
+use_vr: false
+show_gui: false
+robot_cfg: ${robot}
+scene_cfg: ${scene}
+use_scene_info: false
+use_egl: false
+control_freq: 30
+task: ${task}
