@@ -81,7 +81,7 @@ class CalvinEnvironment(gym.Env):
         use_egl,
         control_freq,
         action_mode,
-        task = None,
+        task=None,
     ):
         self.physics_client = p
         # for calculation of FPS
@@ -106,7 +106,7 @@ class CalvinEnvironment(gym.Env):
             scene_cfg, p=self.physics_client, cid=self.cid, np_random=self.np_random
         )
 
-        #self.task: CalvinTask = registered_tasks.get(task)()
+        # self.task: CalvinTask = registered_tasks.get(task)()
         # Load Env
         self.load()
 
@@ -316,13 +316,16 @@ class CalvinEnvironment(gym.Env):
         # self.robot.np_random = self.np_random  # use the same np_randomizer for robot as for env
         return [seed]
 
-    def reset(self, robot_obs=None, scene_obs=None, static=True) -> Tuple[CalvinObservation, float, bool, dict]:
+    def reset(
+        self, robot_obs=None, scene_obs=None, static=True, settle_time=20
+    ) -> Tuple[CalvinObservation, float, bool, dict]:
         self.robot.reset(robot_obs)
         self.scene.reset(scene_obs, static)
-        self.physics_client.stepSimulation(physicsClientId=self.cid)
+        for _ in range(settle_time):
+            self.physics_client.stepSimulation(physicsClientId=self.cid)
         obs = self._get_observation()
         info = self._get_info()
-        reward, done = 0.0, False #self.task.reset(obs)
+        reward, done = 0.0, False  # self.task.reset(obs)
 
         # add values to observation for SceneObservation
         obs.reward = reward
@@ -339,7 +342,7 @@ class CalvinEnvironment(gym.Env):
         self.scene.step()
         obs = self._get_observation()
         info = self._get_info()
-        reward, done = 0.0, False #self.task.step(obs)
+        reward, done = 0.0, False  # self.task.step(obs)
 
         # add values to observation for SceneObservation
         obs.reward = reward
