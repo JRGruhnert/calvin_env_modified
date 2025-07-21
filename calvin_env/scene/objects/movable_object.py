@@ -21,7 +21,7 @@ class MovableObject(BaseObject):
         self.surfaces = surfaces
         self.np_random = np_random
 
-        initial_pos, initial_orn = self.sample_initial_pose()
+        initial_pos, initial_orn = self.sample_initial_pose(False)
         self.uid = self.p.loadURDF(
             self.file.as_posix(),
             initial_pos,
@@ -30,9 +30,9 @@ class MovableObject(BaseObject):
             physicsClientId=self.cid,
         )
 
-    def reset(self, state=None):
+    def reset(self, state=None, drawer_open: bool = False):
         if state is None:
-            initial_pos, initial_orn = self.sample_initial_pose()
+            initial_pos, initial_orn = self.sample_initial_pose(drawer_open)
         else:
             initial_pos, initial_orn = np.split(state, [3])
             if len(initial_orn) == 3:
@@ -44,11 +44,14 @@ class MovableObject(BaseObject):
             physicsClientId=self.cid,
         )
 
-    def sample_initial_pose(self):
+    def sample_initial_pose(self, drawer_open: bool):
         initial_pos = self.initial_pos
         if isinstance(self.initial_pos, str):
             if self.initial_pos == "any":
-                surface = self.np_random.choice(list(self.surfaces.keys()))
+                areas = list(self.surfaces.keys())
+                if not drawer_open:
+                    areas.remove("drawer_open")
+                surface = self.np_random.choice(areas)                  
                 sampling_range = np.array(self.surfaces[surface])
             else:
                 try:

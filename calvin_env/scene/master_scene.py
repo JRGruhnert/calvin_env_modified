@@ -92,7 +92,8 @@ class Scene:
         if scene_obs is None:
             for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights):
                 obj.reset()
-            self.reset_movable_objects()
+            drawer_open = self.doors[1].get_state() > 0.1 #closes 0.0 open 0.22
+            self.reset_movable_objects(drawer_open)
         else:
             door_info, button_info, switch_info, light_info, obj_info = self.parse_scene_obs(scene_obs)
 
@@ -105,7 +106,8 @@ class Scene:
             for switch, state in zip(self.switches, switch_info):
                 switch.reset(state)
             if static:
-                self.reset_movable_objects()
+                drawer_open = self.doors[1].get_state() > 0.1 #closes 0.0 open 0.22
+                self.reset_movable_objects(drawer_open)
             else:
                 for obj, state in zip(self.movable_objects, obj_info):
                     obj.reset(state)
@@ -130,12 +132,12 @@ class Scene:
 
         return door_info, button_info, switch_info, light_info, obj_info
 
-    def reset_movable_objects(self):
+    def reset_movable_objects(self, drawer_open: bool):
         """reset movable objects such that there are no pairwise contacts"""
         num_sampling_iterations = 1000
         for i in range(num_sampling_iterations):
             for obj in self.movable_objects:
-                obj.reset()
+                obj.reset(drawer_open=drawer_open)
             self.p.stepSimulation()
             contact = False
             for obj_a, obj_b in itertools.combinations(self.movable_objects, 2):

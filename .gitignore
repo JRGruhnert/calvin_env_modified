@@ -160,3 +160,4 @@ events.out*
 egl_check/EGL_options.o
 
 dataset/
+results/
