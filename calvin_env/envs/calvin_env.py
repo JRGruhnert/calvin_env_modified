@@ -49,23 +49,6 @@ from typing import Tuple
 import numpy as np
 
 
-registered_tasks: dict[str, CalvinTask] = {
-    "PressButton": PressButton,
-    "OpenGripper": OpenGripper,
-    "CloseGripper": CloseGripper,
-    "OpenDrawer": OpenDrawer,
-    "CloseDrawer": CloseDrawer,
-    "MoveToDrawer": MoveToDrawer,
-    "OpenCabinet": OpenCabinet,
-    "CloseCabinet": CloseCabinet,
-    "MoveToCabinet": MoveToCabinet,
-    "OpenSwitchr": OpenSwitch,
-    "CloseSwitch": CloseSwitch,
-    "MoveToLever": MoveToLever,
-    "EmptyTask": CalvinTask,  # Default task if none is specified
-}
-
-
 class CalvinEnvironment(gym.Env):
 
     def __init__(
