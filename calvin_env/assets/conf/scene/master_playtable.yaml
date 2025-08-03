@@ -51,12 +51,12 @@ objects:
     block_red:
       file: blocks/block_red_middle.urdf
       initial_pos: any
-      initial_orn: any
+      initial_orn: [0, 0, 1.5708]
     block_blue:
       file: blocks/block_blue_small.urdf
       initial_pos: any
-      initial_orn: any
+      initial_orn: [0, 0, 0]
     block_pink:
       file: blocks/block_pink_big.urdf
       initial_pos: any
-      initial_orn: any
+      initial_orn: [0, 0, 1.5708]
