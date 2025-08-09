@@ -49,7 +49,9 @@ class MovableObject(BaseObject):
         if isinstance(self.initial_pos, str):
             if self.initial_pos == "any":
                 areas = list(self.surfaces.keys())
-                if not drawer_open:
+                if drawer_open:
+                    areas.remove("drawer_closed")
+                else:
                     areas.remove("drawer_open")
                 surface = self.np_random.choice(areas)                  
                 sampling_range = np.array(self.surfaces[surface])

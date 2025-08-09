@@ -210,8 +210,8 @@ class Robot:
             + p.getJointState(self.robot_uid, self.gripper_joint_ids[1], physicsClientId=self.cid)[0]
         )
 
-        gripper_opening_state = 1 if gripper_opening_width > 0.009 else 0
-
+        gripper_opening_state = 1 if gripper_opening_width > 0.055 else 0
+        #print(f"Gripper opening width: {gripper_opening_width}, state: {gripper_opening_state}")
         gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
         position = list(gripper_ee_state[0])  # [x, y, z]
         orientation = list(gripper_ee_state[1])  # (qx, qy, qz, qw)

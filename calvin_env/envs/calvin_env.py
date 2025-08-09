@@ -19,21 +19,6 @@ import pybullet_utils.bullet_client as bc
 
 import calvin_env
 from calvin_env.camera.camera import Camera
-from calvin_env.envs.master_tasks.calvin_task import (
-    CalvinTask,
-    PressButton,
-    OpenGripper,
-    CloseGripper,
-    OpenDrawer,
-    CloseDrawer,
-    MoveToDrawer,
-    OpenCabinet,
-    CloseCabinet,
-    MoveToCabinet,
-    OpenSwitch,
-    CloseSwitch,
-    MoveToLever,
-)
 from calvin_env.envs.observation import CalvinObservation
 from calvin_env.robot.robot import Robot
 from calvin_env.scene.master_scene import Scene
@@ -64,7 +49,6 @@ class CalvinEnvironment(gym.Env):
         use_egl,
         control_freq,
         action_mode,
-        task=None,
     ):
         self.physics_client = p
         # for calculation of FPS
