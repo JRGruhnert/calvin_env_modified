@@ -40,7 +40,11 @@ class Scene:
         self.fixed_objects, self.movable_objects = [], []
         self.doors, self.buttons, self.switches, self.lights = [], [], [], []
 
-    def load(self):
+    @property
+    def surfaces(self):
+        return self.surfaces
+    
+    def load(self, robot_uid):
         for name, obj_cfg in self.object_cfg.get("movable_objects", {}).items():
             self.movable_objects.append(
                 MovableObject(
@@ -53,6 +57,7 @@ class Scene:
                     self.euler_obs,
                     self.surfaces,
                     self.np_random,
+                    robot_uid=robot_uid,
                 )
             )
 

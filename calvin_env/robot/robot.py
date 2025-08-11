@@ -126,6 +126,7 @@ class Robot:
             weights=(10, 8, 6, 6, 2, 2, 1),
             num_angles=30,
         )
+        return self.robot_uid
 
     def add_base_cylinder(self):
         """

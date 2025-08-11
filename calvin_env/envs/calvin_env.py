@@ -148,14 +148,19 @@ class CalvinEnvironment(gym.Env):
             self.physics_client.setTimeStep(1.0 / bullet_time_step, physicsClientId=self.cid)
             return cid
 
+    
+    @property
+    def surfaces(self):
+        return self.scene.surfaces
+    
     def load(self):
         log.info("Resetting simulation")
         self.physics_client.resetSimulation(physicsClientId=self.cid)
         log.info("Setting gravity")
         self.physics_client.setGravity(0, 0, -9.8, physicsClientId=self.cid)
 
-        self.robot.load()
-        self.scene.load()
+        robot_uid = self.robot.load()
+        self.scene.load(robot_uid=robot_uid)
 
     def close(self):
         if self.ownsPhysicsClient:

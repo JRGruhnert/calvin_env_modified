@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 
 class MovableObject(BaseObject):
-    def __init__(self, name, obj_cfg, p, cid, data_path, global_scaling, euler_obs, surfaces, np_random):
+    def __init__(self, name, obj_cfg, p, cid, data_path, global_scaling, euler_obs, surfaces, np_random, robot_uid):
         super().__init__(name, obj_cfg, p, cid, data_path, global_scaling)
         self.initial_pos = obj_cfg["initial_pos"]
         self.initial_orn = obj_cfg["initial_orn"]
@@ -20,7 +20,7 @@ class MovableObject(BaseObject):
         self.euler_obs = euler_obs
         self.surfaces = surfaces
         self.np_random = np_random
-
+        self.robot_uid = robot_uid
         initial_pos, initial_orn = self.sample_initial_pose(False)
         self.uid = self.p.loadURDF(
             self.file.as_posix(),
@@ -73,17 +73,13 @@ class MovableObject(BaseObject):
                 raise ValueError
         return initial_pos, initial_orn
 
-    def _relative_velocity_to_gripper(self, object_id) -> float:
-        # Get linear velocities of gripper and object
-        object_lin_vel, _ = self.p.getBaseVelocity(object_id)
+    def _is_touching_gripper(self) -> float:
+        # Get position of object
+        contacts = self.p.getContactPoints(bodyA=self.uid, bodyB=self.robot_uid, physicsClientId=self.cid)
+        return float(len(contacts) > 0)
 
-        # Compute velocity difference magnitude
-        object_speed = np.linalg.norm(np.array(object_lin_vel))
-
-        return object_speed  # If object moves with gripper
-
-    def get_state(self):
-        return float(self._relative_velocity_to_gripper(self.uid))
+    def get_state(self) -> float:
+        return self._is_touching_gripper()
 
     def get_pose(self, euler_obs=False):
         pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
