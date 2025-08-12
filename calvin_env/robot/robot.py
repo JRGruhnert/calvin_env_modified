@@ -54,10 +54,6 @@ class Robot:
         self.gripper_joint_limits = gripper_joint_limits
         self.tcp_link_id = tcp_link_id
 
-        self.joint_velocities_noise: NoiseModel = Identity()
-        self.joint_positions_noise: NoiseModel = Identity()
-        self.joint_forces_noise: NoiseModel = Identity()
-
         # Setup constraints
         self.robot_uid = None
         self.end_effector_link_id = end_effector_link_id
@@ -127,6 +123,12 @@ class Robot:
             num_angles=30,
         )
         return self.robot_uid
+
+        # Create a small sphere at TCP position
+        tcp_pos, _ = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
+
+        sphere = p.createVisualShape(p.GEOM_SPHERE, radius=0.02, rgbaColor=[0, 1, 0, 1])
+        self.marker = p.createMultiBody(baseVisualShapeIndex=sphere, basePosition=tcp_pos)
 
     def add_base_cylinder(self):
         """
@@ -201,10 +203,21 @@ class Robot:
         - robot_info: Dict
         """
         # Get tcp position and orientation
-        tcp_pos, tcp_orn = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
-        if self.euler_obs:
-            tcp_orn = p.getEulerFromQuaternion(tcp_orn)
-
+        tcp_pos, tcp_orn = p.getLinkState(
+            self.robot_uid,
+            self.tcp_link_id,
+            # computeForwardKinematics=1,
+            physicsClientId=self.cid,
+        )[:2]
+        # if self.euler_obs:
+        #    tcp_orn = p.getEulerFromQuaternion(tcp_orn)
+        # Move existing marker to new position
+        p.resetBasePositionAndOrientation(
+            bodyUniqueId=self.marker,
+            posObj=tcp_pos,
+            ornObj=[0, 0, 0, 1],  # No rotation for sphere
+            physicsClientId=self.cid,
+        )
         # Compute gripper opening width from two finger joints
         gripper_opening_width = (
             p.getJointState(self.robot_uid, self.gripper_joint_ids[0], physicsClientId=self.cid)[0]
@@ -212,17 +225,17 @@ class Robot:
         )
 
         gripper_opening_state = 1 if gripper_opening_width > 0.055 else 0
-        #print(f"Gripper opening width: {gripper_opening_width}, state: {gripper_opening_state}")
+        # print(f"Gripper opening width: {gripper_opening_width}, state: {gripper_opening_state}")
         gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
         position = list(gripper_ee_state[0])  # [x, y, z]
         orientation = list(gripper_ee_state[1])  # (qx, qy, qz, qw)
         gripper_pose = np.concatenate([position, orientation])
-
         tcp_pose = np.concatenate((tcp_pos, tcp_orn))
         tcp_state = np.concatenate([tcp_pos, tcp_orn])
-
-        #print(f"Gripper pose: {gripper_pose}")
-        #print(f"TCP pose: {tcp_pose}")
+        print(f"Gripper pose: {gripper_pose}")
+        print(f"TCP pose: {tcp_pose}")
+        # print(f"Gripper pose: {gripper_pose}")
+        # print(f"TCP pose: {tcp_pose}")
 
         # Convert quaternion to rotation matrix (returned as 9 values in row-major order)
         R = p.getMatrixFromQuaternion(orientation)
@@ -327,18 +340,20 @@ class Robot:
         rel_pos, rel_quat, gripper = np.split(action, [3, -1])
         rel_rot = p.getEulerFromQuaternion(rel_quat)
         rel_rot = np.array(rel_rot)
-
+        print(f"Relative position: {rel_pos}, Relative orientation: {rel_rot}")
         rel_pos *= self.max_rel_pos * self.magic_scaling_factor_pos
         rel_rot *= self.max_rel_orn * self.magic_scaling_factor_orn
         if self.use_target_pose:
             self.target_pos += rel_pos
             self.target_orn += rel_rot
+            print(f"Absolute position: {self.target_pos}, Absolute orientation: {self.target_orn}")
             return self.target_pos, self.target_orn, gripper
         else:
             tcp_pos, tcp_orn = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
             tcp_orn = p.getEulerFromQuaternion(tcp_orn)
             abs_pos = np.array(tcp_pos) + rel_pos
             abs_orn = np.array(tcp_orn) + rel_rot
+            print(f"Absolute position: {abs_pos}, Absolute orientation: {abs_orn}")
             return abs_pos, abs_orn, gripper
 
     def apply_joint_action(self, action):

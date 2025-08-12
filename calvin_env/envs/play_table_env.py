@@ -17,9 +17,10 @@ import numpy as np
 import pybullet as p
 import pybullet_utils.bullet_client as bc
 
-from calvin_env_motionplanner import calvin_env
-from calvin_env_motionplanner.calvin_env.utils.utils import FpsController, get_git_commit_hash
-#from utils.utils import FpsController, get_git_commit_hash
+from calvin_env_modified import calvin_env
+from calvin_env_modified.calvin_env.utils.utils import FpsController, get_git_commit_hash
+
+# from utils.utils import FpsController, get_git_commit_hash
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -292,8 +293,7 @@ def run_env(cfg):
 
     env.reset()
     while True:
-        action = {"action": np.array((0., 0, 0, 0, 0, 0, 1)),
-                  "type": "cartesian_rel"}
+        action = {"action": np.array((0.0, 0, 0, 0, 0, 0, 1)), "type": "cartesian_rel"}
         # cartesian actions can also be input directly as numpy arrays
         # action = np.array((0., 0, 0, 0, 0, 0, 1))
 
@@ -313,7 +313,7 @@ def get_env_from_cfg():
         env = hydra.utils.instantiate(cfg.env, show_gui=True, use_vr=False, use_scene_info=True)
         assert env is not None, "Failed to create PlayTableSimEnv"
         return env
-    
+
 
 if __name__ == "__main__":
     run_env()

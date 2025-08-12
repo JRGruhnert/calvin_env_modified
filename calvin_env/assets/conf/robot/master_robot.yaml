@@ -19,5 +19,5 @@ max_velocity: 2
 use_ik_fast: False # Calvin ik fast instead of pybullet ik
 magic_scaling_factor_pos: 1 # 1.6
 magic_scaling_factor_orn: 1 # 2.2
-use_target_pose: false # If true, the robot will use the target pose + relative pose
-euler_obs: false # If TCP pose is in euler angles
+use_target_pose: False # If true, the robot will use the target pose + relative pose
+euler_obs: False # If TCP pose is in euler angles

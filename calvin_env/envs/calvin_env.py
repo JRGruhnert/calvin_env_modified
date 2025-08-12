@@ -40,7 +40,7 @@ class CalvinEnvironment(gym.Env):
         self,
         robot_cfg,
         seed,
-        use_vr,
+        real_time,
         bullet_time_step,
         cameras,
         show_gui,
@@ -55,7 +55,7 @@ class CalvinEnvironment(gym.Env):
         self.t = time.time()
         self.prev_time = time.time()
         self.fps_controller = FpsController(bullet_time_step)
-        self.use_vr = use_vr
+        self.real_time = real_time
         self.show_gui = show_gui
         self.use_scene_info = use_scene_info
         self.cid = -1
@@ -98,25 +98,25 @@ class CalvinEnvironment(gym.Env):
     def initialize_bullet(self, bullet_time_step, render_width, render_height):
         if self.cid < 0:
             self.ownsPhysicsClient = True
-            if self.use_vr:
-                self.physics_client = bc.BulletClient(connection_mode=p.SHARED_MEMORY)
-                cid = self.physics_client._client
-                if cid < 0:
-                    log.error("Failed to connect to SHARED_MEMORY bullet server.\n" " Is it running?")
-                    sys.exit(1)
-                self.physics_client.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
-            elif self.show_gui:
+            if self.show_gui:
                 self.physics_client = bc.BulletClient(connection_mode=p.GUI)
                 cid = self.physics_client._client
                 if cid < 0:
                     log.error("Failed to connect to GUI.")
+                if self.real_time:
+                    self.physics_client.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
+                # Disable PyBullet's built-in controls
+                self.physics_client.configureDebugVisualizer(p.COV_ENABLE_KEYBOARD_SHORTCUTS, 0, physicsClientId=cid)
+
                 self.physics_client.resetDebugVisualizerCamera(
-                    cameraDistance=1.5, cameraYaw=50, cameraPitch=-35, cameraTargetPosition=[0, 0, 0]
+                    cameraDistance=1.0, cameraYaw=50, cameraPitch=-35, cameraTargetPosition=[0, 0, 0]
                 )
             elif self.use_egl:
                 options = f"--width={render_width} --height={render_height}"
                 self.physics_client = p
                 cid = self.physics_client.connect(p.DIRECT, options=options)
+                if self.real_time:
+                    self.physics_client.setRealTimeSimulation(enableRealTimeSimulation=1, physicsClientId=cid)
                 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0, physicsClientId=cid)
                 p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0, physicsClientId=cid)
                 p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0, physicsClientId=cid)
@@ -307,10 +307,22 @@ class CalvinEnvironment(gym.Env):
 
     def step(self, action, action_mode) -> Tuple[CalvinObservation, float, bool, dict]:
         action = {"action": action, "type": action_mode}
+        if self.real_time:
+            print(f"SIM FPS: {(1 / (time.time() - self.t)):.0f}")
+            self.t = time.time()
+            current_time = time.time()
+            delta_t = current_time - self.prev_time
+            if delta_t >= (1.0 / self.control_freq):
+                log.debug(f"Act FPS: {1 / delta_t:.0f}")
+                self.prev_time = time.time()
+                self.robot.apply_action(action)
+            self.fps_controller.step()
+        # for RL call step simulation repeat
+        else:
+            self.robot.apply_action(action)
+            for i in range(self.action_repeat):
+                self.physics_client.stepSimulation(physicsClientId=self.cid)
 
-        self.robot.apply_action(action)
-        for i in range(self.action_repeat):
-            self.physics_client.stepSimulation(physicsClientId=self.cid)
         self.scene.step()
         obs = self._get_observation()
         info = self._get_info()
@@ -324,7 +336,6 @@ class CalvinEnvironment(gym.Env):
 
     def _get_observation(
         self,
-        has_joint_forces=True,
         has_gripper_touch_forces=True,
     ) -> CalvinObservation:
 
@@ -337,12 +348,6 @@ class CalvinEnvironment(gym.Env):
         arm_joint_forces = robot_obs["arm_joint_forces"]
         arm_joint_velocities = robot_obs["arm_joint_velocities"]
         arm_joint_positions = robot_obs["arm_joint_positions"]
-
-        joint_forces = None
-        if has_joint_forces:
-            joint_forces = self.robot.joint_forces_noise.apply(
-                np.array([-f if v < 0 else f for f, v in zip(arm_joint_forces, arm_joint_velocities)])
-            )
 
         ee_forces_flat = None
         if has_gripper_touch_forces:
@@ -390,9 +395,9 @@ class CalvinEnvironment(gym.Env):
             object_states=self.scene.get_dictionary_object_states(),
             low_dim_object_poses=self.scene.get_low_dim_object_poses(),
             low_dim_object_states=self.scene.get_low_dim_object_states(),
-            joint_vel=self.robot.joint_velocities_noise.apply(np.array(arm_joint_velocities)),
-            joint_pos=self.robot.joint_positions_noise.apply(np.array(arm_joint_positions)),
-            joint_forces=joint_forces,
+            joint_vel=np.array(arm_joint_velocities),
+            joint_pos=np.array(arm_joint_positions),
+            joint_forces=arm_joint_forces,
             gripper_matrix=robot_obs["gripper_view_matrix"],
             gripper_pose=robot_obs["gripper_pose"],
             gripper_state=robot_obs["gripper_opening_state"],
@@ -475,7 +480,7 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
     return env
 
 
-def get_env_from_cfg(eval: bool = False, vis: bool = True) -> CalvinEnvironment:
+def get_env_from_cfg(eval: bool = False, vis: bool = True, real_time: bool = False) -> CalvinEnvironment:
     """Bypass Hydra's execution context and create the environment manually."""
     with hydra.initialize(config_path="../assets/conf", version_base="1.1"):
         config_name = "master_config_eval" if eval else "master_config"
@@ -490,7 +495,7 @@ def get_env_from_cfg(eval: bool = False, vis: bool = True) -> CalvinEnvironment:
         env = CalvinEnvironment(
             robot_cfg=cfg.robot,  # Robot basic cfg load here
             seed=cfg.seed,  # ignore for now
-            use_vr=cfg.env.use_vr,  # correct
+            real_time=real_time,  # correct
             bullet_time_step=cfg.env.bullet_time_step,  # ignore for now
             cameras=cfg.cameras,
             show_gui=show_gui,
