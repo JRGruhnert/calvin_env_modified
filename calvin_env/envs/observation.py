@@ -59,6 +59,30 @@ class CalvinObservation(object):
         self._done = None
 
     @property
+    def object_poses(self) -> dict[str, np.ndarray]:
+        """
+        Get the object poses.
+
+        Returns
+        -------
+        dict[str, np.ndarray]
+            The object poses.
+        """
+        return self._object_poses
+    
+    @property
+    def object_states(self) -> dict[str, np.ndarray]:
+        """
+        Get the object states.
+
+        Returns
+        -------
+        dict[str, np.ndarray]
+            The object states.
+        """
+        return self._object_states
+    
+    @property
     def scene_obs(self) -> np.ndarray:
         return self._scene_obs
     
