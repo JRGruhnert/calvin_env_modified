@@ -4,7 +4,6 @@ import pybullet as p
 import torch
 
 from calvin_env.robot.mixed_ik import MixedIK
-from calvin_env.utils.noise import Identity, NoiseModel
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -122,13 +121,14 @@ class Robot:
             weights=(10, 8, 6, 6, 2, 2, 1),
             num_angles=30,
         )
-        return self.robot_uid
 
         # Create a small sphere at TCP position
         tcp_pos, _ = p.getLinkState(self.robot_uid, self.tcp_link_id, physicsClientId=self.cid)[:2]
 
         sphere = p.createVisualShape(p.GEOM_SPHERE, radius=0.02, rgbaColor=[0, 1, 0, 1])
         self.marker = p.createMultiBody(baseVisualShapeIndex=sphere, basePosition=tcp_pos)
+
+        return self.robot_uid
 
     def add_base_cylinder(self):
         """
@@ -225,15 +225,13 @@ class Robot:
         )
 
         gripper_opening_state = 1 if gripper_opening_width > 0.055 else 0
-        # print(f"Gripper opening width: {gripper_opening_width}, state: {gripper_opening_state}")
+        print(f"Gripper opening width: {gripper_opening_width}, state: {gripper_opening_state}")
         gripper_ee_state = p.getLinkState(self.robot_uid, self.end_effector_link_id, physicsClientId=self.cid)
         position = list(gripper_ee_state[0])  # [x, y, z]
         orientation = list(gripper_ee_state[1])  # (qx, qy, qz, qw)
         gripper_pose = np.concatenate([position, orientation])
         tcp_pose = np.concatenate((tcp_pos, tcp_orn))
         tcp_state = np.concatenate([tcp_pos, tcp_orn])
-        print(f"Gripper pose: {gripper_pose}")
-        print(f"TCP pose: {tcp_pose}")
         # print(f"Gripper pose: {gripper_pose}")
         # print(f"TCP pose: {tcp_pose}")
 

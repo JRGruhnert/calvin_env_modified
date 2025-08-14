@@ -151,7 +151,7 @@ class CalvinEnvironment(gym.Env):
     
     @property
     def surfaces(self):
-        return self.scene.surfaces
+        return self.scene._surfaces
     
     def load(self):
         log.info("Resetting simulation")

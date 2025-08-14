@@ -29,7 +29,7 @@ class Scene:
         self.cid = cid
         self.global_scaling = global_scaling
         self.euler_obs = euler_obs
-        self.surfaces = surfaces
+        self._surfaces = surfaces
         self.np_random = np_random
         if os.path.isabs(data_path):
             self.data_path = Path(data_path)
@@ -42,7 +42,7 @@ class Scene:
 
     @property
     def surfaces(self):
-        return self.surfaces
+        return self._surfaces
     
     def load(self, robot_uid):
         for name, obj_cfg in self.object_cfg.get("movable_objects", {}).items():
@@ -55,7 +55,7 @@ class Scene:
                     self.data_path,
                     self.global_scaling,
                     self.euler_obs,
-                    self.surfaces,
+                    self._surfaces,
                     self.np_random,
                     robot_uid=robot_uid,
                 )
