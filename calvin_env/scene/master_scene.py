@@ -92,7 +92,7 @@ class Scene:
 
         self.p.loadURDF(os.path.join(self.data_path, "plane/plane.urdf"), physicsClientId=self.cid)
 
-    def reset(self, scene_obs=None, static=True):
+    def reset(self, scene_obs=None, static=False):
         """Reset objects and doors to initial position."""
         if scene_obs is None:
             for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights):

@@ -4,12 +4,6 @@ import numpy as np
 
 MAX_FORCE = 4
 
-
-class ButtonState(Enum):
-    ON = 1
-    OFF = 0
-
-
 class Switch:
     def __init__(self, name, cfg, uid, p, cid):
         self.name = name
@@ -22,11 +16,18 @@ class Switch:
             if self.p.getJointInfo(uid, i, physicsClientId=self.cid)[1].decode("utf-8") == name
         )
         self.joint_index = joint_index
+        self.link = cfg["link"]
+        self.link_id = next(
+            i
+            for i in range(self.p.getNumJoints(uid, physicsClientId=self.cid))
+            if self.p.getJointInfo(uid, i, physicsClientId=self.cid)[12].decode("utf-8") == self.link
+        )
         self.uid = uid
         self.initial_state = cfg["initial_state"]
         self.effect = cfg["effect"]
         self.ll, self.ul = self.p.getJointInfo(uid, joint_index, physicsClientId=self.cid)[8:10]
         self.trigger_threshold = (self.ll + self.ul) / 2
+        self.sample_states = np.array([self.ll, self.ul])
         self.p.setJointMotorControl2(
             self.uid,
             self.joint_index,
@@ -34,34 +35,37 @@ class Switch:
             force=MAX_FORCE,
             physicsClientId=self.cid,
         )
-        self.state = ButtonState.OFF
         self.light = None
 
     def reset(self, state=None):
-        _state = self.initial_state if state is None else state
+        if self.light is not None:
+            _state = self.sample_states[int(self.light.get_state())]
+        else:
+            raise ValueError("Button has no light effect to reset state")
+        self.initial_state = _state
+        #_state = self.sample_state() if state is None else state
         self.p.resetJointState(
             self.uid,
             self.joint_index,
             _state,
             physicsClientId=self.cid,
         )
-        self.state = ButtonState.OFF
 
     def step(self):
         if self.is_pressed:
-            if self.light is not None and self.state == ButtonState.OFF:
+            if self.light is not None:
                 self.light.turn_on()
-            self.state = ButtonState.ON
+            else:
+                raise ValueError("Switch has no light effect to turn on")
         else:
-            if self.light is not None and self.state == ButtonState.ON:
+            if self.light is not None:
                 self.light.turn_off()
-            self.state = ButtonState.OFF
+            else:
+                raise ValueError("Switch has no light effect to turn off")
 
     @property
-    def is_pressed(self, state=None):
-        joint_state = state
-        if joint_state is None:
-            joint_state = self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0]
+    def is_pressed(self):
+        joint_state = self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0]
 
         if self.initial_state <= self.trigger_threshold:
             return joint_state > self.trigger_threshold
@@ -70,19 +74,33 @@ class Switch:
 
     def get_state(self):
         """return button joint state"""
-        return float(self.state.value)
+        return float(self.is_pressed)
     
     def get_joint_state(self):
         return self.p.getJointState(self.uid, self.joint_index, physicsClientId=self.cid)[0]
 
     def get_pose(self, euler_obs=False):
-        pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
+        """Get the pose of the button link (not the base object)"""
+        # Get link state for specific link
+        link_state = self.p.getLinkState(self.uid, self.link_id, physicsClientId=self.cid)
+        pos = link_state[0]  # World position
+        orn = link_state[1]  # World orientation (quaternion)
         if euler_obs:
             orn = self.p.getEulerFromQuaternion(orn)
         return np.concatenate([pos, orn])
 
     def get_info(self):
-        return {"joint_state": self.get_joint_state(), "logical_state": self.state.value}
+        return {"joint_state": self.get_joint_state()}
 
     def add_effect(self, light):
         self.light = light
+
+    def sample_state(self):
+        if isinstance(self.initial_state, str):
+            if self.initial_state == "any":
+                return np.random.choice(self.sample_states)
+            else:
+                raise ValueError(f"Invalid initial state: {self.initial_state}")
+        else:
+            # If initial_state is a number, return it directly
+            return self.initial_state

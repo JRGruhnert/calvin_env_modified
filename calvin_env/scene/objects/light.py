@@ -15,6 +15,7 @@ class Light:
         self.p = p
         self.cid = cid
         self.link = cfg["link"]
+        self.initial_state = cfg["initial_state"]
         self.link_id = next(
             i
             for i in range(self.p.getNumJoints(uid, physicsClientId=self.cid))
@@ -22,25 +23,35 @@ class Light:
         )
         self.color_on = cfg["color"]
         self.color_off = [1, 1, 1, 1]
-        self.state = LightState.OFF
+        self.sample_states = np.array([0, 1])
+        self.state = self.sample_state()
+        if self.state == LightState.ON:
+            self.turn_on()
+        else:
+            self.turn_off()
 
     def reset(self, state=None):
         if state is None:
+            _state = self.sample_state().value
+        else:
+            _state = state
+        if _state == LightState.ON.value:
+            self.turn_on()
+        elif _state == LightState.OFF.value:
             self.turn_off()
         else:
-            if state == LightState.ON.value:
-                self.turn_on()
-            elif state == LightState.OFF.value:
-                self.turn_off()
-            else:
-                print("Light state can be only 0 or 1.")
-                raise ValueError
+            print("Light state can be only 0 or 1.")
+            raise ValueError
 
     def get_state(self):
         return float(self.state.value)
 
     def get_pose(self, euler_obs=False):
-        pos, orn = self.p.getBasePositionAndOrientation(self.uid, physicsClientId=self.cid)
+        """Get the pose of the button link (not the base object)"""
+        # Get link state for specific link
+        link_state = self.p.getLinkState(self.uid, self.link_id, physicsClientId=self.cid)
+        pos = link_state[0]  # World position
+        orn = link_state[1]  # World orientation (quaternion)
         if euler_obs:
             orn = self.p.getEulerFromQuaternion(orn)
         return np.concatenate([pos, orn])
@@ -58,3 +69,13 @@ class Light:
 
     def serialize(self):
         return self.get_info()
+
+    def sample_state(self):
+        if isinstance(self.initial_state, str):
+            if self.initial_state == "any":
+                return LightState(np.random.choice(self.sample_states))
+            else:
+                raise ValueError(f"Invalid initial state: {self.initial_state}")
+        else:
+            # If initial_state is a number, return it directly
+            return LightState(self.initial_state)

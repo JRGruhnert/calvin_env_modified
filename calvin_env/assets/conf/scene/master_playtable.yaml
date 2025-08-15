@@ -29,23 +29,29 @@ objects:
       initial_orn: [0, 0, 0]
       joints:
         base__slide:
+          link: slide_link
           initial_state: 0 # Prismatic
         base__drawer:
+          link: drawer_link
           initial_state: 0 # Prismatic
       buttons:
         base__button:
+          link: button_link
           initial_state: 0 # Prismatic
           effect: led
       switches:
         base__switch:
+          link: switch_link
           initial_state: 0 # Revolute
           effect: lightbulb
       lights:
         lightbulb:
           link: light_link
-          color: [1, 1, 0, 1] # pink
+          initial_state: any
+          color: [0, 1, 0, 1] # pink
         led:
           link: led_link
+          initial_state: any
           color: [0, 1, 0, 1] # green
   movable_objects:
     block_red:

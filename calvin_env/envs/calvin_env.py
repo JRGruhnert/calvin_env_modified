@@ -22,7 +22,7 @@ from calvin_env.camera.camera import Camera
 from calvin_env.envs.observation import CalvinObservation
 from calvin_env.robot.robot import Robot
 from calvin_env.scene.master_scene import Scene
-from calvin_env.utils.utils import FpsController, get_git_commit_hash
+from calvin_env.utils.utils import FpsController
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -289,10 +289,10 @@ class CalvinEnvironment(gym.Env):
         return [seed]
 
     def reset(
-        self, robot_obs=None, scene_obs=None, static=True, settle_time=20
+        self, robot_obs=None, scene_obs=None, settle_time=20
     ) -> Tuple[CalvinObservation, float, bool, dict]:
         self.robot.reset(robot_obs)
-        self.scene.reset(scene_obs, static)
+        self.scene.reset(scene_obs)
         for _ in range(settle_time):
             self.physics_client.stepSimulation(physicsClientId=self.cid)
         obs = self._get_observation()
