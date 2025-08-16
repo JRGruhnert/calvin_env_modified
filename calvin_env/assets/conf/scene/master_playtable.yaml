@@ -30,10 +30,10 @@ objects:
       joints:
         base__slide:
           link: slide_link
-          initial_state: 0 # Prismatic
+          initial_state: any # Prismatic
         base__drawer:
           link: drawer_link
-          initial_state: 0 # Prismatic
+          initial_state: any # Prismatic
       buttons:
         base__button:
           link: button_link
@@ -42,7 +42,7 @@ objects:
       switches:
         base__switch:
           link: switch_link
-          initial_state: 0 # Revolute
+          initial_state: any # Revolute
           effect: lightbulb
       lights:
         lightbulb:

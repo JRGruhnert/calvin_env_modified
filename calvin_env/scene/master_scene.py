@@ -43,7 +43,7 @@ class Scene:
     @property
     def surfaces(self):
         return self._surfaces
-    
+
     def load(self, robot_uid):
         for name, obj_cfg in self.object_cfg.get("movable_objects", {}).items():
             self.movable_objects.append(
@@ -97,7 +97,7 @@ class Scene:
         if scene_obs is None:
             for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights):
                 obj.reset()
-            drawer_open = self.doors[1].get_state() > 0.1 #closes 0.0 open 0.22
+            drawer_open = self.doors[1].get_state() > 0.1  # closes 0.0 open 0.22
             self.reset_movable_objects(drawer_open)
         else:
             door_info, button_info, switch_info, light_info, obj_info = self.parse_scene_obs(scene_obs)
@@ -111,7 +111,7 @@ class Scene:
             for switch, state in zip(self.switches, switch_info):
                 switch.reset(state)
             if static:
-                drawer_open = self.doors[1].get_state() > 0.1 #closes 0.0 open 0.22
+                drawer_open = self.doors[1].get_state() > 0.1  # closes 0.0 open 0.22
                 self.reset_movable_objects(drawer_open)
             else:
                 for obj, state in zip(self.movable_objects, obj_info):
@@ -163,9 +163,11 @@ class Scene:
         object_poses = {}
         for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights, self.movable_objects):
             pose = obj.get_pose(euler_obs=self.euler_obs)
+            # print(f"Object {obj.name} pose: {pose}")
             if isinstance(pose, np.ndarray):
                 object_poses[obj.name] = pose
             else:
+                # print(f"Object {obj.name} is invalid")
                 log.error(f"Object {obj.name} has invalid pose {pose}")
                 object_poses[obj.name] = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         return object_poses
