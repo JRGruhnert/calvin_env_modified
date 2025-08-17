@@ -382,8 +382,6 @@ class Robot:
             abs_rot_quat = p.getQuaternionFromEuler(abs_rot_euler)
             jnt_ps = self.mixed_ik.get_ik(abs_pos, abs_rot_quat)
         elif action["type"] == "quat_abs":
-            print("quat_abs action")
-            print(action["action"])
             abs_pos, abs_rot_quat, self.gripper_action = np.split(action["action"], [3, 7])
             jnt_ps = self.mixed_ik.get_ik(abs_pos, abs_rot_quat)
 
