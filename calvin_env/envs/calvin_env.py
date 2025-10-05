@@ -19,7 +19,7 @@ import pybullet_utils.bullet_client as bc
 
 import calvin_env
 from calvin_env.camera.camera import Camera
-from calvin_env.envs.observation import CalvinObservation
+from calvin_env.envs.observation import CalvinEnvObservation
 from calvin_env.robot.robot import Robot
 from calvin_env.scene.master_scene import Scene
 from calvin_env.utils.utils import FpsController
@@ -148,11 +148,10 @@ class CalvinEnvironment(gym.Env):
             self.physics_client.setTimeStep(1.0 / bullet_time_step, physicsClientId=self.cid)
             return cid
 
-    
     @property
     def surfaces(self):
         return self.scene._surfaces
-    
+
     def load(self):
         log.info("Resetting simulation")
         self.physics_client.resetSimulation(physicsClientId=self.cid)
@@ -181,7 +180,7 @@ class CalvinEnvironment(gym.Env):
     def update_prediction_marker(self, points: list):
         self.camera_map["front"].update_marker_points(points)
 
-    def render(self, obs: CalvinObservation, info: dict[str, bool] = None, mode="human"):
+    def render(self, obs: CalvinEnvObservation, info: dict[str, bool] = None, mode="human"):
         """render is gym compatibility function"""
         if mode == "human":
             # Resize images to the desired size
@@ -288,9 +287,7 @@ class CalvinEnvironment(gym.Env):
         # self.robot.np_random = self.np_random  # use the same np_randomizer for robot as for env
         return [seed]
 
-    def reset(
-        self, robot_obs=None, scene_obs=None, settle_time=20
-    ) -> Tuple[CalvinObservation, float, bool, dict]:
+    def reset(self, robot_obs=None, scene_obs=None, settle_time=20) -> Tuple[CalvinEnvObservation, float, bool, dict]:
         self.robot.reset(robot_obs)
         self.scene.reset(scene_obs)
         for _ in range(settle_time):
@@ -305,7 +302,7 @@ class CalvinEnvironment(gym.Env):
         # obs, reward, done, info
         return obs, reward, done, info
 
-    def step(self, action, action_mode) -> Tuple[CalvinObservation, float, bool, dict]:
+    def step(self, action, action_mode) -> Tuple[CalvinEnvObservation, float, bool, dict]:
         action = {"action": action, "type": action_mode}
         if self.real_time:
             print(f"SIM FPS: {(1 / (time.time() - self.t)):.0f}")
@@ -337,7 +334,7 @@ class CalvinEnvironment(gym.Env):
     def _get_observation(
         self,
         has_gripper_touch_forces=True,
-    ) -> CalvinObservation:
+    ) -> CalvinEnvObservation:
 
         wrist_rgb, wrist_depth, wrist_pcd, wrist_mask = self.camera_map["wrist"].render()
         front_rgb, front_depth, front_pcd, front_mask = self.camera_map["front"].render()
@@ -383,7 +380,7 @@ class CalvinEnvironment(gym.Env):
             "wrist": camera_settings["wrist"]["intrinsics"],
             "front": camera_settings["front"]["intrinsics"],
         }
-        obs = CalvinObservation(
+        obs = CalvinEnvObservation(
             camera_names=["wrist", "front"],
             rgb=rgb_dict,
             depth=depth_dict,

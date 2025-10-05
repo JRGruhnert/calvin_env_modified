@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 
-class CalvinObservation(object):
+
+class CalvinEnvObservation(object):
     """Storage for both visual and low-dimensional observations."""
 
     def __init__(
@@ -29,7 +30,7 @@ class CalvinObservation(object):
         gripper_matrix: np.ndarray,
         gripper_joint_positions: np.ndarray,
         gripper_touch_forces: np.ndarray,
-        scene_obs: np.ndarray
+        scene_obs: np.ndarray,
     ):
         self._camera_names = camera_names
         self._rgb = rgb
@@ -69,7 +70,7 @@ class CalvinObservation(object):
             The object poses.
         """
         return self._object_poses
-    
+
     @property
     def object_states(self) -> dict[str, np.ndarray]:
         """
@@ -81,11 +82,11 @@ class CalvinObservation(object):
             The object states.
         """
         return self._object_states
-    
+
     @property
     def scene_obs(self) -> np.ndarray:
         return self._scene_obs
-    
+
     @property
     def camera_names(self) -> list[str]:
         """
