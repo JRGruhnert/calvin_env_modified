@@ -4,7 +4,7 @@
 """
 
 __version__ = "0.0.1"
-__project__ = "calvin_env"
+__project__ = "calvin_env_modified"
 __author__ = "Oier Mees, Lukas Hermann"
 __license__ = "GPLv3"
 __email__ = "meeso@informatik.uni-freiburg.de, hermannl@informatik.uni-freiburg.de,"
