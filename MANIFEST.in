@@ -1,1 +1,1 @@
-recursive-include calvin_env/assets *
+recursive-include calvin_env_modified/assets *
