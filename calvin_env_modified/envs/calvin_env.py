@@ -305,7 +305,7 @@ class CalvinEnvironment(gym.Env):
     def step(self, action, action_mode) -> Tuple[CalvinEnvObservation, float, bool, dict]:
         action = {"action": action, "type": action_mode}
         if self.real_time:
-            print(f"SIM FPS: {(1 / (time.time() - self.t)):.0f}")
+            # print(f"SIM FPS: {(1 / (time.time() - self.t)):.0f}")
             self.t = time.time()
             current_time = time.time()
             delta_t = current_time - self.prev_time
