@@ -12,7 +12,7 @@ def _read(f):
     return open(op.join(op.dirname(__file__), f)).read() if op.exists(f) else ""
 
 
-_meta = _read("calvin_env/__init__.py")
+_meta = _read("calvin_env_modified/__init__.py")
 
 
 def find_meta(_meta, string):
@@ -33,7 +33,7 @@ meta = dict(
     description="VR Data Collection and Rendering",
     platforms="Any",
     zip_safe=False,
-    keywords="calvin_env".split(),
+    keywords="calvin_env_modified".split(),
     author=find_meta(_meta, "__author__"),
     author_email=find_meta(_meta, "__email__"),
     url=" https://github.com/mees/calvin_env",
