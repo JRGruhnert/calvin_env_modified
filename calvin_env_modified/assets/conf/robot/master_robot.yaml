@@ -1,4 +1,4 @@
-_target_: calvin_env.robot.robot.Robot
+_target_: calvin_env_modified.robot.robot.Robot
 filename: franka_panda/panda.urdf
 base_position: ${scene.robot_base_position}
 base_orientation: ${scene.robot_base_orientation}

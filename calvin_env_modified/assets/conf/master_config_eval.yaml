@@ -1,6 +1,6 @@
 seed: 0
 use_vr: false
-data_path: calvin_env/assets/data
+data_path: calvin_env_modified/assets/data
 save_dir: /tmp
 record: false
 

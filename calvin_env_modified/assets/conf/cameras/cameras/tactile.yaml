@@ -1,4 +1,4 @@
-_target_: calvin_env.camera.tactile_sensor.TactileSensor
+_target_: calvin_env_modified.camera.tactile_sensor.TactileSensor
 name: tactile
 width: 120
 height: 160

@@ -1,4 +1,4 @@
-_target_: tapas_gmm.calvin_project.calvin.envs.master_env.MasterEnvironment
+_target_: calvin_env_modified.envs.calvin_env.CalvinEnvironment
 _recursive_: false
 cameras: ${cameras}
 seed: 0

@@ -1,4 +1,4 @@
-_target_: calvin_env.scene.master_scene.Scene
+_target_: calvin_env_modified.scene.master_scene.Scene
 _recursive_: false
 data_path: ${data_path}
 global_scaling: 0.8

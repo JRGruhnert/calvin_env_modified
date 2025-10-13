@@ -1,4 +1,4 @@
-_target_: calvin_env.camera.static_camera.StaticCamera
+_target_: calvin_env_modified.camera.static_camera.StaticCamera
 name: opposing
 fov: 75
 aspect: 1

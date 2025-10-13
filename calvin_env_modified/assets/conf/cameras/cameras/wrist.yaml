@@ -1,4 +1,4 @@
-_target_: calvin_env.camera.gripper_camera.GripperCamera
+_target_: calvin_env_modified.camera.gripper_camera.GripperCamera
 name: wrist
 fov: 60
 aspect: 1
