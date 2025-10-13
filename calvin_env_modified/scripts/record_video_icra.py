@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pybullet as p
 
-from calvin_env.utils import utils
+from calvin_env_modified.utils import utils
 
 """
 This script loads a rendered episode and replays it using the recorded actions.

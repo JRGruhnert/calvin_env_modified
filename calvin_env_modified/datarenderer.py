@@ -12,7 +12,7 @@ import omegaconf
 import pybullet as p
 from scipy.spatial.transform.rotation import Rotation as R
 
-from calvin_env.utils.utils import count_frames, get_episode_lengths, set_egl_device, to_relative_action
+from calvin_env_modified.utils.utils import count_frames, get_episode_lengths, set_egl_device, to_relative_action
 
 # A logger for this file
 log = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-from calvin_env.scene.objects.base_object import BaseObject
+from calvin_env_modified.scene.objects.base_object import BaseObject
 
 
 class FixedObject(BaseObject):

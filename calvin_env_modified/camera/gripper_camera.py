@@ -1,7 +1,7 @@
 import numpy as np
 import pybullet as p
 
-from calvin_env.camera.camera import Camera
+from calvin_env_modified.camera.camera import Camera
 
 
 class GripperCamera(Camera):

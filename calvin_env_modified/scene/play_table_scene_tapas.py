@@ -7,13 +7,17 @@ import numpy as np
 
 # A logger for this file
 from omegaconf import OmegaConf
+from tensordict import TensorDict
+import torch
 
-from calvin_env.scene.objects.button import Button
-from calvin_env.scene.objects.door import Door
-from calvin_env.scene.objects.fixed_object import FixedObject
-from calvin_env.scene.objects.light import Light
-from calvin_env.scene.objects.movable_object import MovableObject
-from calvin_env.scene.objects.switch import Switch
+from calvin_env_modified.camera.camera import Camera
+from calvin_env_modified.scene.objects.button import Button
+from calvin_env_modified.scene.objects.door import Door
+from calvin_env_modified.scene.objects.fixed_object import FixedObject
+from calvin_env_modified.scene.objects.light import Light
+from calvin_env_modified.scene.objects.movable_object import MovableObject
+from calvin_env_modified.scene.objects.switch import Switch
+from tapas_gmm.utils.observation import dict_to_tensordict
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +25,7 @@ log = logging.getLogger(__name__)
 REPO_BASE = Path(__file__).parents[2]
 
 
-class PlayTableScene:
+class PlayTableSceneTapas:
     def __init__(self, objects, data_path, euler_obs, p, cid, global_scaling, surfaces, np_random, **kwargs):
         self.p = p
         self.cid = cid
@@ -39,9 +43,6 @@ class PlayTableScene:
         self.doors, self.buttons, self.switches, self.lights = [], [], [], []
 
     def load(self):
-        self.fixed_objects, self.movable_objects = [], []
-        self.doors, self.buttons, self.switches, self.lights = [], [], [], []
-
         for name, obj_cfg in self.object_cfg.get("movable_objects", {}).items():
             self.movable_objects.append(
                 MovableObject(
@@ -59,12 +60,12 @@ class PlayTableScene:
 
         for name, obj_cfg in self.object_cfg.get("fixed_objects", {}).items():
             fixed_obj = FixedObject(name, obj_cfg, self.p, self.cid, self.data_path, self.global_scaling)
+            self.fixed_objects.append(fixed_obj)
 
             if "joints" in obj_cfg:
                 for joint_name, cfg in obj_cfg["joints"].items():
                     door = Door(joint_name, cfg, fixed_obj.uid, self.p, self.cid)
                     self.doors.append(door)
-            self.fixed_objects.append(fixed_obj)
 
             if "buttons" in obj_cfg:
                 for button_name, cfg in obj_cfg["buttons"].items():
@@ -149,15 +150,74 @@ class PlayTableScene:
         for button_switch in itertools.chain(self.buttons, self.switches):
             button_switch.step()
 
-    def get_obs(self):
+    def get_low_dim_state(self):
         """Return state information of the doors, drawers and shelves."""
-        door_states = [door.get_state() for door in self.doors]
-        button_states = [button.get_state() for button in self.buttons]
-        switch_states = [switch.get_state() for switch in self.switches]
-        light_states = [light.get_state() for light in self.lights]
-        object_poses = list(itertools.chain(*[obj.get_state() for obj in self.movable_objects]))
+        list_of_states = list()
+        for obj in itertools.chain(self.doors, self.buttons, self.switches, self.lights, self.movable_objects):
+            state = obj.get_state()
+            print(f"State: {type(state)}")
+            if state is not None:
+                if isinstance(state, np.ndarray):
+                    list_of_states.append(state)
+                else:
+                    list_of_states.append(np.array([state]))
 
-        return np.concatenate([door_states, button_states, switch_states, light_states, object_poses])
+        # return np.concatenate(list_of_states)
+        # door_states = [door.get_state() for door in self.doors]  # also joints
+        # button_states = [button.get_state() for button in self.buttons]
+        # switch_states = [switch.get_state() for switch in self.switches]
+        # light_states = [light.get_state() for light in self.lights]
+        # object_poses = list(itertools.chain(*[obj.get_state() for obj in self.movable_objects]))
+
+        return list_of_states
+
+    '''
+    def get_low_dim_state(self) -> np.ndarray:
+        """Gets the pose and various other properties of objects in the task.
+
+        :return: 1D array of low-dimensional task state.
+        """
+
+        # Corner cases:
+        # (1) Object has been deleted.
+        # (2) Object has been grasped (and is now child of gripper).
+
+        state = []
+        for obj, objtype in self.objects:
+            state.extend(np.array(obj.get_pose()))
+            if obj.get_type() == ObjectType.JOINT:
+                state.extend([Joint(obj.get_handle()).get_joint_position()])
+            elif obj.get_type() == ObjectType.FORCE_SENSOR:
+                forces, torques = ForceSensor(obj.get_handle()).read()
+                state.extend(forces + torques)
+
+        return np.array(state).flatten()
+    '''
+
+    def _get_misc(self):
+        def _get_cam_data(cam: Camera, name: str):
+            d = {}
+            if cam.still_exists():
+                d = {
+                    "%s_extrinsics" % name: cam.get_matrix(),
+                    "%s_intrinsics" % name: cam.get_intrinsic_matrix(),
+                    "%s_near" % name: cam.get_near_clipping_plane(),
+                    "%s_far" % name: cam.get_far_clipping_plane(),
+                }
+            return d
+
+        misc = _get_cam_data(self._cam_over_shoulder_left, "left_shoulder_camera")
+        misc.update(_get_cam_data(self._cam_over_shoulder_right, "right_shoulder_camera"))
+        misc.update(_get_cam_data(self._cam_overhead, "overhead_camera"))
+        misc.update(_get_cam_data(self._cam_front, "front_camera"))
+        misc.update(_get_cam_data(self._cam_wrist, "wrist_camera"))
+        misc.update({"variation_index": self._variation_index})
+        if self._joint_position_action is not None:
+            # Store the actual requested joint positions during demo collection
+            misc.update({"joint_position_action": self._joint_position_action})
+        joint_poses = [j.get_pose() for j in self.robot.arm.joints]
+        misc.update({"joint_poses": joint_poses})
+        return misc
 
     def get_info(self):
         """

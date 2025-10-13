@@ -39,8 +39,7 @@ meta = dict(
     url=" https://github.com/mees/calvin_env",
     packages=find_packages(exclude=["tests"]),
     install_requires=install_requires,
-    include_package_data=True
-
+    include_package_data=True,
 )
 
 if __name__ == "__main__":

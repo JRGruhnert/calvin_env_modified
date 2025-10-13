@@ -9,7 +9,7 @@ import numpy as np
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from calvin_env.utils import utils
+from calvin_env_modified.utils import utils
 
 
 def pairwise(iterable):

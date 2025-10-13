@@ -8,8 +8,8 @@ import hydra
 import pybullet as p
 import quaternion  # noqa
 
-from calvin_env.io_utils.data_recorder import DataRecorder
-from calvin_env.io_utils.motion_planner import PandaArmMotionPlanningSolver
+from calvin_env_modified.io_utils.data_recorder import DataRecorder
+from calvin_env_modified.io_utils.motion_planner import PandaArmMotionPlanningSolver
 
 # A logger for this file
 log = logging.getLogger(__name__)

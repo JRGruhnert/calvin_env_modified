@@ -2,7 +2,7 @@ import numpy as np
 import pybullet as p
 from scipy.spatial.transform import Rotation as R
 
-from calvin_env.utils.utils import angle_between_quaternions
+from calvin_env_modified.utils.utils import angle_between_quaternions
 
 
 class MixedIK:
@@ -34,7 +34,7 @@ class MixedIK:
         if self.use_ik_fast:
             from ikfast_franka_panda import get_fk
 
-            from calvin_env.robot.IKfast import IKfast
+            from calvin_env_modified.robot.IKfast import IKfast
 
             self.get_fk = get_fk
             self.ik_fast = IKfast(

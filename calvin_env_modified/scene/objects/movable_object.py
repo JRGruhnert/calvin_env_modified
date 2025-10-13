@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from omegaconf.errors import ConfigKeyError
 
-from calvin_env.scene.objects.base_object import BaseObject
+from calvin_env_modified.scene.objects.base_object import BaseObject
 
 log = logging.getLogger(__name__)
 

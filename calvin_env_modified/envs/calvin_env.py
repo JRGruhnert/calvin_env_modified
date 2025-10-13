@@ -17,12 +17,12 @@ import numpy as np
 import pybullet as p
 import pybullet_utils.bullet_client as bc
 
-import calvin_env
-from calvin_env.camera.camera import Camera
-from calvin_env.envs.observation import CalvinEnvObservation
-from calvin_env.robot.robot import Robot
-from calvin_env.scene.master_scene import Scene
-from calvin_env.utils.utils import FpsController
+import calvin_env_modified
+from calvin_env_modified.camera.camera import Camera
+from calvin_env_modified.envs.observation import CalvinEnvObservation
+from calvin_env_modified.robot.robot import Robot
+from calvin_env_modified.scene.master_scene import Scene
+from calvin_env_modified.utils.utils import FpsController
 
 # A logger for this file
 log = logging.getLogger(__name__)
@@ -469,7 +469,7 @@ def get_env(dataset_path, obs_space=None, show_gui=True, **kwargs):
         for k in exclude_keys:
             del render_conf.cameras[k]
     if "scene" in kwargs:
-        scene_cfg = OmegaConf.load(Path(calvin_env.__file__).parents[1] / "conf/scene" / f"{kwargs['scene']}.yaml")
+        scene_cfg = OmegaConf.load(Path(calvin_env_modified.__file__).parents[1] / "conf/scene" / f"{kwargs['scene']}.yaml")
         render_conf.scene = scene_cfg
     if not hydra.core.global_hydra.GlobalHydra.instance().is_initialized():
         hydra.initialize(".")

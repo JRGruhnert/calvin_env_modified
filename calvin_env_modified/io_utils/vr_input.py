@@ -5,7 +5,7 @@ import numpy as np
 import pybullet as p
 import quaternion  # noqa
 
-import calvin_env.utils.utils as utils
+import calvin_env_modified.utils.utils as utils
 
 # A logger for this file
 log = logging.getLogger(__name__)

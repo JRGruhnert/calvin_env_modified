@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 
-from calvin_env.camera.camera import Camera
+from calvin_env_modified.camera.camera import Camera
 import tacto
 
 REPO_BASE = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))

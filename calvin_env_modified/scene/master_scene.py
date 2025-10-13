@@ -9,13 +9,13 @@ import numpy as np
 from omegaconf import OmegaConf
 import torch
 
-from calvin_env.camera.camera import Camera
-from calvin_env.scene.objects.button import Button
-from calvin_env.scene.objects.door import Door
-from calvin_env.scene.objects.fixed_object import FixedObject
-from calvin_env.scene.objects.light import Light
-from calvin_env.scene.objects.movable_object import MovableObject
-from calvin_env.scene.objects.switch import Switch
+from calvin_env_modified.camera.camera import Camera
+from calvin_env_modified.scene.objects.button import Button
+from calvin_env_modified.scene.objects.door import Door
+from calvin_env_modified.scene.objects.fixed_object import FixedObject
+from calvin_env_modified.scene.objects.light import Light
+from calvin_env_modified.scene.objects.movable_object import MovableObject
+from calvin_env_modified.scene.objects.switch import Switch
 
 log = logging.getLogger(__name__)
 

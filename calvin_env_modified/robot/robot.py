@@ -3,7 +3,7 @@ import numpy as np
 import pybullet as p
 import torch
 
-from calvin_env.robot.mixed_ik import MixedIK
+from calvin_env_modified.robot.mixed_ik import MixedIK
 
 # A logger for this file
 log = logging.getLogger(__name__)
